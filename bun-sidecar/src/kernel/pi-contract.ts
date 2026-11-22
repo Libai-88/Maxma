@@ -253,6 +253,8 @@ export const MAXMA_CUSTOM_TOOLS = [
   "code_references",
   "code_diagnostics",
   "code_apply_patch",
+  "doc_search",
+  "doc_read",
 ] as const;
 
 /**

@@ -28,6 +28,7 @@ import { editOfficeFileTool, readOfficeFileTool, writeOfficeFileTool } from "../
 import { canvasApplyTool, canvasExportTool, canvasReadTool, type CanvasToolContext } from "../tools/canvas";
 import { coworkUpdateStepsTool } from "../tools/cowork";
 import { codeDefinitionTool, codeDiagnosticsTool, codeReferencesTool, codeSearchTool, codeSymbolsTool } from "../tools/code";
+import { docReadTool, docSearchTool } from "../tools/doc";
 import { applyPatchTool } from "../tools/patch";
 import { webFetchTool, webSearchTool } from "../tools/web";
 
@@ -90,6 +91,7 @@ export function buildPiCustomTools(
     codeDefinitionTool(),
     codeReferencesTool(),
     ...(cwd ? [codeSymbolsTool(cwd), codeDiagnosticsTool(cwd), applyPatchTool(cwd)] : []),
+    ...(cwd ? [docSearchTool(cwd), docReadTool(cwd)] : []),
     ...(cwd ? [readOfficeFileTool(cwd, options?.writeRoots)] : []),
     ...(cwd ? [writeOfficeFileTool(cwd, options?.writeRoots)] : []),
     ...(cwd ? [editOfficeFileTool(cwd, options?.writeRoots)] : []),

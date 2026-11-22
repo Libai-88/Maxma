@@ -41,6 +41,8 @@ export const TOOL_DISPLAY_NAMES: Record<string, string> = {
   code_references: '查找引用',
   code_diagnostics: '代码诊断',
   code_apply_patch: '多文件编辑',
+  doc_search: '文档检索',
+  doc_read: '读取文档片段',
   // ── kernel 扩展点 ──
   submit_plan: '提交计划',
   browser_navigate: '浏览器打开页面',

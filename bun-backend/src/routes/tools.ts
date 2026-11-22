@@ -53,6 +53,8 @@ export const BUILTIN_TOOLS: Array<Record<string, unknown>> = [
   { name: "code_references", label: "Code References", description: "查找标识符引用（文本级）", category: "code", builtin: true, source: "custom" },
   { name: "code_diagnostics", label: "Code Diagnostics", description: "TS/JS 语法级诊断", category: "code", builtin: true, source: "custom" },
   { name: "code_apply_patch", label: "Apply Patch", description: "事务式多文件编辑，失败回滚；可 typecheck", category: "code", builtin: true, source: "custom" },
+  { name: "doc_search", label: "Document Search", description: "在已索引工作区检索 PDF/DOCX/XLSX/MD/TXT/HTML，返回页码/段落/工作表行", category: "doc", builtin: true, source: "custom" },
+  { name: "doc_read", label: "Document Read", description: "按页码/段落/工作表/行号读取文档索引中的原文块", category: "doc", builtin: true, source: "custom" },
   { name: "submit_plan", label: "Submit Plan", description: "提交实施计划供用户审批", category: "interactive", builtin: true, source: "custom" },
 ];
 

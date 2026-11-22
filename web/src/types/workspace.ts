@@ -112,3 +112,19 @@ export interface CodeIndexRootStatus {
   running: boolean
   startedAt: number | null
 }
+
+export interface DocIndexRootStatus {
+  root: string
+  label: string
+  root_id: string | null
+  indexedAt: number | null
+  status: 'idle' | 'indexing' | 'ready' | 'error' | 'cancelled'
+  fileCount: number
+  chunkCount: number
+  unsupportedCount: number
+  warnings: string[]
+  error: string | null
+  progress: number
+  running: boolean
+  startedAt: number | null
+}

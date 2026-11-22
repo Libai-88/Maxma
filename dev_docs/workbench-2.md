@@ -14,6 +14,8 @@ Workbench 2.0 把右侧工作台从「只有推理/画布」扩成桌面 Agent �
 - 懒加载文件树、按文件名过滤、递归文件名搜索、键盘导航、右键菜单、面包屑回填；
 - 多文件 tab、行号与语法高亮预览、文本/Markdown/图片/PDF/二进制/HTML 源码；DOCX/XLSX/PPTX
   只读预览，并跟随磁盘落盘自动刷新（M2-A）；
+- 文档索引（M3-A）：文件面板可为当前工作区建立全文索引，支持 PDF/DOCX/XLSX/MD/TXT/HTML，
+  检索结果带页码/段落/工作表/行号坐标，Agent 通过 `doc_search`/`doc_read` 引用原文；
 - CodeMirror 6 编辑器：`Ctrl+S` 保存、`Ctrl+F` 查找、dirty 标记、`base_hash` 冲突保护；
 - 变更/diff：分支/HEAD、工作区与暂存 diff、按文件审阅；
 - 命令运行器：无 TTY、cwd 锁工作区根、超时杀进程树、输出截断；

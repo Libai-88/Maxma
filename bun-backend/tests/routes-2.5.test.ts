@@ -52,7 +52,7 @@ describe("tools / plugins / files（阶段 2.5a）", () => {
     expect(res.status).toBe(200);
     const tools = (await res.json()) as Array<Record<string, unknown>>;
     expect(Array.isArray(tools)).toBe(true);
-    expect(tools.length).toBe(24);
+    expect(tools.length).toBe(26);
     expect(tools.some((t) => t.name === "remember_memory" && t.source === "custom")).toBe(true);
     expect(tools.some((t) => t.name === "submit_plan" && t.source === "custom")).toBe(true);
     expect(tools.some((t) => t.name === "code_search" && t.category === "code")).toBe(true);
@@ -346,7 +346,7 @@ describe("health 四部件（阶段 2.5b）", () => {
       expect(comp.reason_code).toBeUndefined();
       expect(comp.summary).toBeUndefined();
     }
-    expect((body.native_tools as { detail: string }).detail).toBe("24 个工具");
+    expect((body.native_tools as { detail: string }).detail).toBe("26 个工具");
     expect((body.mcp_tools as { detail: string }).detail).toBe("0 个工具（未配置 MCP 服务器）");
     expect(body.provider_diagnostics_enabled).toBe(false);
     expect(body.think_path_enabled).toBe(false);
@@ -406,7 +406,7 @@ describe("capabilities 聚合（阶段 2.5c）", () => {
     const body = (await res.json()) as Record<string, unknown>;
 
     expect(typeof body.settings).toBe("object");
-    expect((body.tools as unknown[]).length).toBe(24);
+    expect((body.tools as unknown[]).length).toBe(26);
     expect(body.tool_categories).toBeDefined();
     expect(Array.isArray(body.mcp_servers)).toBe(true);
     expect(Array.isArray(body.providers)).toBe(true);
@@ -482,14 +482,14 @@ describe("capabilities 聚合（阶段 2.5c）", () => {
     expect(cowork.engine_supported).toBe(true);
     expect(cowork.user_toggleable).toBe(false);
     expect(cowork.stage).toBe("m2-office");
-    for (const key of ["tasks", "artifacts", "pptx"]) {
+    for (const key of ["tasks", "artifacts", "pptx", "doc_index"]) {
       expect((cowork[key] as Record<string, unknown>).enabled).toBe(true);
     }
-    for (const key of ["office_com", "doc_index", "schedules", "connectors", "model_router", "share"]) {
+    for (const key of ["office_com", "schedules", "connectors", "model_router", "share"]) {
       expect((cowork[key] as Record<string, unknown>).enabled).toBe(false);
     }
     expect(feature("tools").builtin_count).toBe(7);
-    expect(feature("tools").custom_count).toBe(17);
+    expect(feature("tools").custom_count).toBe(19);
     // providers 可能含 opencode-zen 内置供应商（后台同步注入，与运行顺序无关）——
     // 只验证形状：providers 数组、total_models 与 providers 长度一致
     expect(Array.isArray(feature("models").providers)).toBe(true);

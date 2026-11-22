@@ -8,6 +8,7 @@
 import type {
   CodeIndexRootStatus,
   CommandResult,
+  DocIndexRootStatus,
   GitCommitResult,
   GitDiffResult,
   GitPrResult,
@@ -115,6 +116,17 @@ export function createWorkspaceApi({ request, getToken, ensureTokenLoaded }: Wor
 
     codeIndexBuild: (rootId: string, force = false) =>
       request<{ ok: boolean; status: CodeIndexRootStatus }>('/code-index/build', {
+        method: 'POST',
+        body: JSON.stringify({ root_id: rootId, force }),
+      }),
+
+    docIndexStatus: (rootId?: string) => {
+      const query = rootId ? `?root_id=${encodeURIComponent(rootId)}` : ''
+      return request<{ roots: DocIndexRootStatus[] }>(`/doc-index/status${query}`)
+    },
+
+    docIndexBuild: (rootId: string, force = false) =>
+      request<{ ok: boolean; status: DocIndexRootStatus }>('/doc-index/build', {
         method: 'POST',
         body: JSON.stringify({ root_id: rootId, force }),
       }),

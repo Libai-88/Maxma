@@ -330,7 +330,7 @@ function buildManifest(deps: CapabilitiesDeps, gathered: Record<string, unknown>
     artifacts: { enabled: coworkEnabled },
     pptx: { enabled: coworkEnabled, reason: coworkEnabled ? null : "Cowork 已由 MAXMA_COWORK=0 关闭" },
     office_com: { enabled: false },
-    doc_index: { enabled: false },
+    doc_index: { enabled: true, formats: ["pdf", "docx", "xlsx", "md", "txt", "html"], ocr: false },
     schedules: { enabled: false },
     connectors: { enabled: false },
     model_router: { enabled: false },

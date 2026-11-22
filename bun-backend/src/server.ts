@@ -64,6 +64,7 @@ import { createWorkspaceRoutes } from "./routes/workspace";
 import { createSecurityRoutes } from "./routes/security";
 import { createGitRoutes } from "./routes/git";
 import { createCodeIndexRoutes } from "./routes/code-index";
+import { createDocIndexRoutes } from "./routes/doc-index";
 import { createHardwareRoutes } from "./routes/hardware";
 import { createDiagnosticsRoutes } from "./routes/diagnostics";
 import { createCapabilitiesRoutes } from "./routes/capabilities";
@@ -350,6 +351,7 @@ app.route("/", createExtensionsRoutes());
   app.route("/", createSecurityRoutes());
   app.route("/", createGitRoutes());
   app.route("/", createCodeIndexRoutes());
+  app.route("/", createDocIndexRoutes());
   app.route("/", createHardwareRoutes());
 
   // 2.5b：diagnostics（错误报告 + 前端诊断上报）

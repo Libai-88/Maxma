@@ -7,7 +7,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
-import { AlertCircle, ChevronDown, Database, FolderOpen, FolderPlus, MoreHorizontal, Pencil, RefreshCw, Search, Trash2, X } from 'lucide-react'
+import { AlertCircle, ChevronDown, Database, FileSearch, FolderOpen, FolderPlus, MoreHorizontal, Pencil, RefreshCw, Search, Trash2, X } from 'lucide-react'
 
 import { api } from '@/api'
 import { Button } from '@/components/ui/button'
@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils'
 import { normalizeContextItem } from '@/context/contextItems'
 import { emitContextItem } from '@/context/contextBus'
 import type { WorkspaceRoot, WorkspaceTreeEntry } from '@/types/workspace'
+import type { DocIndexRootStatus } from '@/types/workspace'
 import type { WorkbenchPaneProps } from './paneProps'
 import { FilePreview, type EditorDraft, type PreviewData, type PreviewTab } from './FilePreview'
 import type { OfficeFormat } from './OfficePreview'
@@ -75,6 +76,8 @@ export function FilesPane({ sessionId }: WorkbenchPaneProps) {
   const [menu, setMenu] = useState<ContextMenuState | null>(null)
   const [revealPath, setRevealPath] = useState<{ path: string; token: number } | null>(null)
   const [indexing, setIndexing] = useState(false)
+  const [docIndexing, setDocIndexing] = useState(false)
+  const [docStatus, setDocStatus] = useState<DocIndexRootStatus | null>(null)
   const previewsRef = useRef<Record<string, PreviewData>>({})
   const draftsRef = useRef<Record<string, EditorDraft>>({})
   const editingPathRef = useRef('')
@@ -97,6 +100,25 @@ export function FilesPane({ sessionId }: WorkbenchPaneProps) {
   useEffect(() => {
     previewsRef.current = previews
   }, [previews])
+
+  useEffect(() => {
+    const rootId = activeRoot?.id
+    if (!rootId) {
+      setDocStatus(null)
+      return
+    }
+    let alive = true
+    setDocStatus(null)
+    void api.docIndexStatus(rootId)
+      .then((result) => {
+        if (!alive) return
+        setDocStatus(result.roots[0] ?? null)
+      })
+      .catch(() => {
+        if (alive) setDocStatus(null)
+      })
+    return () => { alive = false }
+  }, [activeRoot?.id])
 
   // 关闭当前 tab 后自动落到最后一个 tab；用副作用收敛状态，
   // 不再在关闭回调里读渲染期的 tabs 闭包（快速连点会互相覆盖）。
@@ -162,6 +184,8 @@ export function FilesPane({ sessionId }: WorkbenchPaneProps) {
     setActivePath('')
     setFilter('')
     setRevealPath(null)
+    setDocIndexing(false)
+    setDocStatus(null)
     setRefreshToken((token) => token + 1)
   }
 
@@ -504,6 +528,39 @@ export function FilesPane({ sessionId }: WorkbenchPaneProps) {
     }
   }
 
+  async function buildDocIndex() {
+    if (!activeRoot || docIndexing) return
+    const rootId = activeRoot.id
+    const epoch = rootEpochRef.current
+    setDocIndexing(true)
+    setError('')
+    try {
+      await api.docIndexBuild(rootId, true)
+      for (let attempt = 0; attempt < 120; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 500))
+        if (epoch !== rootEpochRef.current) return
+        const result = await api.docIndexStatus(rootId)
+        const row = result.roots[0]
+        if (!row) throw new Error('文档索引状态不可用')
+        setDocStatus(row)
+        if (row.status === 'error') throw new Error(row.error ?? '文档索引失败')
+        if (row.status === 'ready') {
+          setNotice(
+            `文档索引就绪：${row.fileCount} 个文件 / ${row.chunkCount} 块` +
+              (row.unsupportedCount > 0 ? `，${row.unsupportedCount} 个未识别` : ''),
+          )
+          setTimeout(() => setNotice(''), 4000)
+          return
+        }
+      }
+      throw new Error('文档索引仍在后台进行，可稍后重试')
+    } catch (e) {
+      if (epoch === rootEpochRef.current) setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      if (epoch === rootEpochRef.current) setDocIndexing(false)
+    }
+  }
+
   function contextAction(action: 'open' | 'reveal' | 'copy' | 'chat', entry: WorkspaceTreeEntry) {
     setMenu(null)
     if (action === 'open') { openFile(entry); return }
@@ -571,6 +628,18 @@ export function FilesPane({ sessionId }: WorkbenchPaneProps) {
           )}
         </div>
         {!renaming && <p className="truncate text-micro text-muted-foreground" title={activeRoot.path}>{activeRoot.path}</p>}
+        {!renaming && docStatus && docStatus.status !== 'idle' && (
+          <p className="truncate text-micro text-muted-foreground" title={docStatus.error ?? undefined}>
+            文档索引：
+            {docStatus.status === 'ready'
+              ? `${docStatus.fileCount} 文件 · ${docStatus.chunkCount} 块`
+              : docStatus.status === 'error'
+                ? docStatus.error ?? '失败'
+                : docStatus.status === 'cancelled'
+                  ? '已取消'
+                  : `${docStatus.fileCount} 文件 · ${Math.round(docStatus.progress * 100)}%`}
+          </p>
+        )}
         {activeRoot.available === false && (
           <div className="flex items-center gap-1 rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1.5 text-micro text-destructive">
             <AlertCircle className="size-3 shrink-0" />文件夹已不存在或不可访问；请重新选择或移除授权。
@@ -586,6 +655,9 @@ export function FilesPane({ sessionId }: WorkbenchPaneProps) {
         <Button size="icon-xs" variant="ghost" onClick={() => setRefreshToken((token) => token + 1)} aria-label="刷新文件树" title="刷新"><RefreshCw className="size-3.5" /></Button>
         <Button size="icon-xs" variant="ghost" disabled={indexing} onClick={() => void buildCodeIndex()} aria-label="重建代码索引" title="重建代码索引（供代码检索/符号工具使用）">
           <Database className={cn('size-3.5', indexing && 'animate-pulse text-muted-foreground')} />
+        </Button>
+        <Button size="icon-xs" variant="ghost" disabled={docIndexing} onClick={() => void buildDocIndex()} aria-label="建立文档索引" title="建立/更新文档索引（供 PDF/DOCX/XLSX 检索与页码引用使用）">
+          <FileSearch className={cn('size-3.5', docIndexing && 'animate-pulse text-muted-foreground')} />
         </Button>
         <Button size="icon-xs" variant="ghost" aria-pressed={showIgnored} onClick={() => setShowIgnored((value) => !value)} aria-label={showIgnored ? '隐藏忽略项' : '显示忽略项'} title="显示忽略项"><MoreHorizontal className={cn('size-3.5', showIgnored && 'text-foreground')} /></Button>
       </div>
