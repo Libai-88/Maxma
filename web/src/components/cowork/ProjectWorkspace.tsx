@@ -82,7 +82,7 @@ export function ProjectWorkspace({ project, tasks, tab, onTabChange, onProjectUp
               {project.instructions.trim() || '还没有项目指令；在设置里补上引用与交付约束。'}
             </p>
             <p className="mt-1 text-caption text-muted-foreground">
-              {roots.length > 0 ? `${roots.length} 个工作区根` : '未绑定工作区根'} · {project.data_policy === 'cloud' ? '允许云端模型' : '仅本地模型'}
+              {roots.length > 0 ? `${roots.length} 个工作区根` : '未绑定工作区根'} · {project.data_policy === 'cloud' ? '允许云端模型（发送前确认）' : '仅本地模型 · 0 云端请求'}
             </p>
           </div>
           <div className="flex items-center gap-2">

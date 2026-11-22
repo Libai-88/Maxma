@@ -21,7 +21,7 @@ export function dbPath(): string {
   return path.join(getApiDataDir(), "maxma.db");
 }
 
-export const SCHEMA_VERSION = 12;
+export const SCHEMA_VERSION = 13;
 
 type Migration = string | ((conn: Database) => void);
 
@@ -75,6 +75,27 @@ function migrateV12CoworkProjects(conn: Database): void {
     }
   }
   conn.exec("INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (12, julianday('now'))");
+}
+
+function migrateV13CoworkFileBackups(conn: Database): void {
+  // v13：工作区写入的回滚账本。每次把 staging 产物落到用户工作区前，
+  // 都在数据目录留一份字节快照；恢复前再备份当前文件，避免“恢复”又变成静默覆盖。
+  conn.exec(`CREATE TABLE IF NOT EXISTS cowork_file_backups (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      artifact_id TEXT,
+      original_path TEXT NOT NULL,
+      backup_path TEXT NOT NULL,
+      sha256 TEXT NOT NULL DEFAULT '',
+      size_bytes INTEGER NOT NULL DEFAULT 0,
+      reason TEXT NOT NULL DEFAULT 'export',
+      created_at TEXT NOT NULL,
+      restored_at TEXT,
+      FOREIGN KEY (task_id) REFERENCES cowork_tasks(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_cowork_file_backups_task_created
+      ON cowork_file_backups(task_id, created_at DESC);
+    INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (13, julianday('now'));`);
 }
 
 export const SCHEMA_MIGRATIONS: Migration[] = [
@@ -378,6 +399,8 @@ export const SCHEMA_MIGRATIONS: Migration[] = [
     INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (11, julianday('now'));`,
   // v12: Cowork 项目资产与定时策略（M3-B/C）。
   migrateV12CoworkProjects,
+  // v13: Cowork 工作区写入的回滚账本（M4-C）。
+  migrateV13CoworkFileBackups,
 ];
 
 let initializedForPath: string | null = null;
@@ -413,6 +436,18 @@ export function initializeDatabase(): void {
         conn.query("SELECT MAX(version) AS v FROM schema_version").get() as { v: number | null }
       ).v ?? 0;
       if (current < SCHEMA_VERSION) {
+        // 迁移前留一致性快照：VACUUM INTO 不受 WAL 中未 checkpoint 数据影响。
+        try {
+          const backupDir = path.join(getApiDataDir(), "backups");
+          fs.mkdirSync(backupDir, { recursive: true });
+          const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+          const target = path.join(backupDir, `maxma-before-m4-${stamp}.db`);
+          const sqlTarget = target.replace(/'/g, "''");
+          conn.exec(`VACUUM INTO '${sqlTarget}'`);
+          console.info(`[db] migration backup -> ${target}`);
+        } catch (err) {
+          console.warn(`[db] migration backup failed (non-fatal): ${String(err)}`);
+        }
         for (const migration of SCHEMA_MIGRATIONS.slice(current)) {
           applyMigration(conn, migration);
         }

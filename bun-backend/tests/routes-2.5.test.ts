@@ -481,13 +481,13 @@ describe("capabilities 聚合（阶段 2.5c）", () => {
     expect(cowork.enabled).toBe(true);
     expect(cowork.engine_supported).toBe(true);
     expect(cowork.user_toggleable).toBe(false);
-    expect(cowork.stage).toBe("m2-office");
-    for (const key of ["tasks", "artifacts", "pptx", "doc_index"]) {
+    expect(cowork.stage).toBe("m4-trust");
+    for (const key of ["tasks", "artifacts", "pptx", "doc_index", "schedules", "connectors", "model_router", "share", "approvals", "data_boundary", "file_safety"]) {
       expect((cowork[key] as Record<string, unknown>).enabled).toBe(true);
     }
-    for (const key of ["office_com", "schedules", "connectors", "model_router", "share"]) {
-      expect((cowork[key] as Record<string, unknown>).enabled).toBe(false);
-    }
+    expect((cowork.office_com as Record<string, unknown>).enabled).toBe(false);
+    expect((cowork.model_router as Record<string, unknown>).local_only_blocks_cloud).toBe(true);
+    expect((cowork.share as Record<string, unknown>).includes).toEqual(["artifacts", "sources.json", "README.md"]);
     expect(feature("tools").builtin_count).toBe(7);
     expect(feature("tools").custom_count).toBe(19);
     // providers 可能含 opencode-zen 内置供应商（后台同步注入，与运行顺序无关）——

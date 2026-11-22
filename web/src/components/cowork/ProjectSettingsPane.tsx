@@ -182,7 +182,7 @@ export function ProjectSettingsPane({ project, onProjectUpdated, onNotice }: {
               <option value="local_only">仅本地模型（local_only）</option>
               <option value="cloud">允许云端模型（cloud）</option>
             </select>
-            <p className="text-caption text-muted-foreground">策略写入项目与任务；发送前提示与模型路由在 M4 补齐。</p>
+            <p className="text-caption text-muted-foreground">任务继承项目策略；local_only 在模型路由层阻断云端，新建任务会先显示模型与预估成本。</p>
           </div>
           {error && <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{error}</p>}
           <div className="flex justify-end">

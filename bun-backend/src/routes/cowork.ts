@@ -20,7 +20,18 @@ import {
   type CoworkEvent,
   type CoworkTask,
 } from "../services/cowork-store";
+import { approvalView, listApprovals, batchableApprovals } from "../services/cowork-approval-center";
+import { buildDeliveryPackage } from "../services/cowork-package";
+import {
+  deleteStagedArtifact,
+  exportArtifactToWorkspace,
+  listFileBackups,
+  previewExportTarget,
+  restoreFileBackup,
+} from "../services/cowork-source-safety";
+import { getConnection } from "../db/core";
 import { CoworkOrchestrator } from "../services/cowork-orchestrator";
+import { normalizeModelProfile, resolveCoworkModelRoute, type CoworkModelRoute } from "../services/cowork-model";
 
 export interface CoworkRoutesDeps {
   /** 懒加载：只有真正访问 Cowork 路由时才打开任务库连接。 */
@@ -57,6 +68,21 @@ function cleanText(value: unknown, max = 20_000): string {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
+/** 对外只暴露路由解释与成本，绝不返回 `params`（其中可能含解密后的 api_key）。 */
+function publicModelRoute(route: CoworkModelRoute) {
+  return {
+    provider_id: route.provider_id,
+    provider_label: route.provider_label,
+    model: route.model,
+    location: route.location,
+    profile: route.profile,
+    fit: route.fit,
+    reason: route.reason,
+    fallback: route.fallback,
+    cost: route.cost,
+  };
+}
+
 export function createCoworkRoutes(deps: CoworkRoutesDeps): Hono {
   const app = new Hono();
   const enabled = () => deps.enabled();
@@ -70,6 +96,65 @@ export function createCoworkRoutes(deps: CoworkRoutesDeps): Hono {
       tasks: isEnabled ? getStore().listTasks().length : 0,
       active_sessions: isEnabled ? getOrchestrator().activeSessionCount : 0,
     });
+  });
+
+  /**
+   * 新建任务前的模型路由预检：只返回解释与成本，不落库、不发 prompt。
+   * 任务已存在时以任务实际策略为准；否则用请求里的 project_id 约束数据边界。
+   */
+  app.post("/api/cowork/model-route/preview", async (c) => {
+    if (!enabled()) return c.json({ detail: "Cowork 任务层未启用" }, 503);
+    try {
+      const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+      const taskId = cleanText(body.task_id, 200);
+      const projectId = cleanText(body.project_id, 200);
+      const task = taskId ? getStore().getTask(taskId) : null;
+      const project = !task && projectId ? getStore().getProject(projectId) : null;
+      const dataPolicy = task?.data_policy
+        ?? (project?.data_policy === "local_only" ? "local_only" : cleanText(body.data_policy, 20) || "cloud");
+      const rawPolicy = body.model_policy && typeof body.model_policy === "object" && !Array.isArray(body.model_policy)
+        ? (body.model_policy as Record<string, unknown>)
+        : {};
+      const profile = dataPolicy === "local_only" ? "private" : normalizeModelProfile(rawPolicy.profile);
+      const modelPolicyJson = task?.model_policy_json ?? JSON.stringify({ profile });
+      const promptChars = Math.max(1, Math.min(200_000, Number(body.prompt_chars) || 1_000));
+      const route = await resolveCoworkModelRoute({
+        dataPolicy,
+        modelPolicyJson,
+        promptChars,
+        longDocument: Boolean(body.long_document) || promptChars > 20_000,
+      });
+      return c.json({ route: publicModelRoute(route), data_policy: dataPolicy });
+    } catch (err) {
+      return errorResponse(c, err);
+    }
+  });
+
+  app.get("/api/cowork/approvals", (c) => {    if (!enabled()) return c.json({ detail: "Cowork 任务层未启用" }, 503);
+    const status = cleanText(c.req.query("status"), 20) || "pending";
+    const taskId = cleanText(c.req.query("task_id"), 200) || undefined;
+    const approvals = listApprovals(getConnection(), { status, taskId });
+    return c.json({ approvals, batchable_count: approvals.filter((item) => item.batchable).length });
+  });
+
+  app.post("/api/cowork/approvals/batch", async (c) => {
+    if (!enabled()) return c.json({ detail: "Cowork 任务层未启用" }, 503);
+    try {
+      const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+      const ids = Array.isArray(body.ids) ? body.ids.map((id) => cleanText(id, 200)).filter(Boolean) : [];
+      const safe = batchableApprovals(getConnection(), ids);
+      for (const approval of safe) {
+        await getOrchestrator().decideTool(approval.id, true, "批量批准低风险只读操作");
+        getStore().appendEvent(approval.task_id, approval.run_id, "cowork.approval.batch", {
+          approval_id: approval.id,
+          tool_name: cleanText(approval.payload.tool_name, 100),
+          message: "已批量批准低风险只读操作",
+        });
+      }
+      return c.json({ approved: safe.length, approvals: safe });
+    } catch (err) {
+      return errorResponse(c, err);
+    }
   });
 
   app.get("/api/cowork/activity", (c) => {
@@ -101,6 +186,9 @@ export function createCoworkRoutes(deps: CoworkRoutesDeps): Hono {
         permission_mode: cleanText(body.permission_mode, 20),
         project_id: cleanText(body.project_id, 200) || null,
         data_policy: cleanText(body.data_policy, 20),
+        model_policy: body.model_policy && typeof body.model_policy === "object" && !Array.isArray(body.model_policy)
+          ? (body.model_policy as Record<string, unknown>)
+          : undefined,
         inputs: body.inputs && typeof body.inputs === "object" && !Array.isArray(body.inputs)
           ? (body.inputs as Record<string, unknown>)
           : {},
@@ -247,6 +335,99 @@ export function createCoworkRoutes(deps: CoworkRoutesDeps): Hono {
     }
   });
 
+  app.post("/api/cowork/tasks/:id/artifacts/:artifactId/export", async (c) => {
+    try {
+      const task = getStore().getTask(c.req.param("id"));
+      const artifact = getStore().getTaskDetail(task.id).artifacts
+        .find((item: CoworkArtifact) => item.id === c.req.param("artifactId"));
+      if (!artifact) throw new CoworkNotFoundError("交付物不存在");
+      const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+      const target = previewExportTarget(task, artifact, cleanText(body.target_path, 1000));
+      const approval = getStore().createApproval({
+        taskId: task.id,
+        runId: getStore().getLatestRun(task.id)?.id ?? null,
+        kind: "export",
+        payload: {
+          artifact_id: artifact.id,
+          artifact_path: artifact.path,
+          target_path: target.directory,
+          target_file: target.resolved,
+          versioned: target.versioned,
+          summary: `导出 ${path.basename(artifact.path)} 到工作区`,
+        },
+        ttlMs: 30 * 60 * 1000,
+      });
+      return c.json({ approval: approvalView(approval) }, 201);
+    } catch (err) {
+      return errorResponse(c, err);
+    }
+  });
+
+  app.post("/api/cowork/tasks/:id/artifacts/:artifactId/delete", async (c) => {
+    try {
+      const task = getStore().getTask(c.req.param("id"));
+      const artifact = getStore().getTaskDetail(task.id).artifacts
+        .find((item: CoworkArtifact) => item.id === c.req.param("artifactId"));
+      if (!artifact) throw new CoworkNotFoundError("交付物不存在");
+      const approval = getStore().createApproval({
+        taskId: task.id,
+        runId: getStore().getLatestRun(task.id)?.id ?? null,
+        kind: "delete",
+        payload: {
+          artifact_id: artifact.id,
+          path: artifact.path,
+          summary: `删除 staged 产物 ${path.basename(artifact.path)}（移入 trash）`,
+        },
+        ttlMs: 30 * 60 * 1000,
+      });
+      return c.json({ approval: approvalView(approval) }, 201);
+    } catch (err) {
+      return errorResponse(c, err);
+    }
+  });
+
+  app.get("/api/cowork/tasks/:id/package", (c) => {
+    try {
+      const task = getStore().getTask(c.req.param("id"));
+      const pkg = buildDeliveryPackage(task, getStore().getTaskDetail(task.id).artifacts);
+      const encoded = encodeURIComponent(pkg.filename);
+      return new Response(pkg.bytes, {
+        headers: {
+          "content-type": "application/zip",
+          "content-disposition": `attachment; filename="cowork-delivery.zip"; filename*=UTF-8''${encoded}`,
+          "cache-control": "no-store",
+          "x-content-type-options": "nosniff",
+        },
+      });
+    } catch (err) {
+      return errorResponse(c, err);
+    }
+  });
+
+  app.get("/api/cowork/tasks/:id/file-backups", (c) => {
+    try {
+      const task = getStore().getTask(c.req.param("id"));
+      return c.json({ backups: listFileBackups(getConnection(), task.id) });
+    } catch (err) {
+      return errorResponse(c, err);
+    }
+  });
+
+  app.post("/api/cowork/file-backups/:id/restore", (c) => {
+    if (!enabled()) return c.json({ detail: "Cowork 任务层未启用" }, 503);
+    try {
+      const backup = restoreFileBackup(getConnection(), c.req.param("id"));
+      getStore().appendEvent(backup.task_id, null, "cowork.file.restored", {
+        backup_id: backup.id,
+        path: backup.original_path,
+        message: "已从备份恢复工作区文件",
+      });
+      return c.json({ backup });
+    } catch (err) {
+      return errorResponse(c, err);
+    }
+  });
+
   app.get("/api/cowork/tasks/:id/events", (c) => {
     let task: CoworkTask;
     try {
@@ -327,6 +508,55 @@ export function createCoworkRoutes(deps: CoworkRoutesDeps): Hono {
         const modifiedPlan = action === "modify" ? cleanText(body.modified_plan, 20_000) : "";
         if (action === "modify" && !modifiedPlan) throw new CoworkValidationError("修改计划必须提供 modified_plan");
         await getOrchestrator().decidePlan(approvalId, action as "approve" | "reject" | "modify", reason, modifiedPlan);
+      } else if (approval.kind === "export") {
+        if (!["approve", "reject"].includes(action)) {
+          throw new CoworkValidationError("导出审批 action 必须是 approve/reject");
+        }
+        if (action === "reject") {
+          getStore().resolveApproval(approvalId, "rejected", reason || "用户拒绝导出");
+        } else {
+          const payload = JSON.parse(approval.payload_json || "{}") as Record<string, unknown>;
+          const task = getStore().getTask(approval.task_id);
+          const artifact = getStore().getTaskDetail(task.id).artifacts
+            .find((item: CoworkArtifact) => item.id === payload.artifact_id);
+          if (!artifact) throw new CoworkNotFoundError("交付物不存在");
+          const result = exportArtifactToWorkspace(
+            getConnection(),
+            task,
+            artifact,
+            typeof payload.target_path === "string" ? payload.target_path : "",
+          );
+          getStore().resolveApproval(approvalId, "approved", reason || "用户批准导出");
+          getStore().appendEvent(task.id, approval.run_id, "cowork.artifact.exported", {
+            approval_id: approval.id,
+            artifact_id: artifact.id,
+            path: result.path,
+            versioned: result.versioned,
+            backup_id: result.backup_id,
+            sha256: result.sha256,
+            message: `已导出到 ${result.path}`,
+          });
+        }
+      } else if (approval.kind === "delete") {
+        if (!["approve", "reject"].includes(action)) {
+          throw new CoworkValidationError("删除审批 action 必须是 approve/reject");
+        }
+        if (action === "reject") {
+          getStore().resolveApproval(approvalId, "rejected", reason || "用户拒绝删除");
+        } else {
+          const payload = JSON.parse(approval.payload_json || "{}") as Record<string, unknown>;
+          const task = getStore().getTask(approval.task_id);
+          const artifact = getStore().getTaskDetail(task.id).artifacts
+            .find((item: CoworkArtifact) => item.id === payload.artifact_id);
+          if (!artifact) throw new CoworkNotFoundError("交付物不存在");
+          const result = deleteStagedArtifact(getConnection(), task, artifact);
+          getStore().resolveApproval(approvalId, "approved", reason || "用户批准删除");
+          getStore().appendEvent(task.id, approval.run_id, "cowork.artifact.deleted", {
+            approval_id: approval.id,
+            artifact_id: artifact.id,
+            trashed_to: result.trashed_to,
+          });
+        }
       } else {
         if (!["approve", "reject"].includes(action)) {
           throw new CoworkValidationError("工具审批 action 必须是 approve/reject");

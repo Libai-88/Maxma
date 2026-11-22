@@ -19,7 +19,7 @@ export type CoworkTaskStatus =
 
 export type CoworkRunStatus = 'running' | 'paused' | 'completed' | 'failed' | 'cancelled'
 export type CoworkStepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped'
-export type CoworkApprovalKind = 'plan' | 'tool'
+export type CoworkApprovalKind = 'plan' | 'tool' | 'export' | 'delete'
 export type CoworkApprovalStatus = 'pending' | 'approved' | 'rejected' | 'modified' | 'expired'
 
 export interface CoworkTask {
@@ -235,7 +235,74 @@ export interface CreateCoworkTaskInput {
   permission_mode?: string
   project_id?: string | null
   data_policy?: string
+  model_policy?: CoworkModelPolicy
   inputs?: Record<string, unknown>
+}
+
+export type CoworkModelProfile = 'private' | 'balanced' | 'quality'
+
+export interface CoworkModelPolicy {
+  profile?: CoworkModelProfile
+}
+
+export interface CoworkModelRouteSummary {
+  provider_id: string
+  provider_label: string
+  model: string
+  location: 'local' | 'cloud'
+  profile: CoworkModelProfile
+  fit: boolean
+  reason: string
+  fallback: { from_provider: string; from_model: string; reason: string } | null
+  cost: {
+    estimated_usd: number | null
+    note: string
+    pricing_known: boolean
+  }
+  data_policy: string
+}
+
+export interface CoworkApprovalView {
+  id: string
+  task_id: string
+  task_title: string
+  project_id: string | null
+  run_id: string | null
+  kind: CoworkApprovalKind
+  title: string
+  detail: string
+  risk_level: string
+  batchable: boolean
+  status: CoworkApprovalStatus
+  payload: Record<string, unknown>
+  expires_at: string | null
+  created_at: string
+}
+
+export interface CoworkApprovalList {
+  approvals: CoworkApprovalView[]
+  batchable_count: number
+}
+
+export interface CoworkFileBackup {
+  id: string
+  task_id: string
+  artifact_id: string | null
+  original_path: string
+  backup_path: string
+  sha256: string
+  size_bytes: number
+  reason: string
+  created_at: string
+  restored_at: string | null
+}
+
+export interface CoworkExportResult {
+  path: string
+  versioned: boolean
+  backup_id: string
+  sha256: string
+  size_bytes: number
 }
 
 export interface CoworkPlanPayload {

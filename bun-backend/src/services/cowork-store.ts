@@ -75,132 +75,31 @@ import type {
   CoworkTaskStatus,
 } from "./cowork-status";
 
-export interface CoworkTask {
-  id: string;
-  project_id: string | null;
-  title: string;
-  objective: string;
-  status: CoworkTaskStatus;
-  workspace_root: string;
-  staging_root: string;
-  permission_mode: string;
-  model_policy_json: string;
-  data_policy: string;
-  inputs_json: string;
-  session_id: string | null;
-  schedule_id: string | null;
-  created_at: string;
-  updated_at: string;
-  completed_at: string | null;
-}
+export type {
+  CoworkTask,
+  CoworkRun,
+  CoworkStep,
+  CoworkArtifact,
+  CoworkApproval,
+  CoworkEvent,
+  CoworkTaskDetail,
+  CoworkProject,
+  CoworkProjectAsset,
+  CoworkSchedule,
+} from "./cowork-store-types";
 
-export interface CoworkRun {
-  id: string;
-  task_id: string;
-  attempt: number;
-  status: CoworkRunStatus;
-  started_at: string;
-  ended_at: string | null;
-  error: string | null;
-  checkpoint_json: string;
-  usage_json: string;
-}
-
-export interface CoworkStep {
-  id: string;
-  run_id: string;
-  seq: number;
-  label: string;
-  status: CoworkStepStatus;
-  detail_json: string;
-  started_at: string | null;
-  ended_at: string | null;
-}
-
-export interface CoworkArtifact {
-  id: string;
-  task_id: string;
-  run_id: string | null;
-  kind: string;
-  path: string;
-  version: number;
-  sha256: string;
-  size_bytes: number;
-  template_id: string | null;
-  status: string;
-  sources_json: string;
-  created_at: string;
-}
-
-export interface CoworkApproval {
-  id: string;
-  task_id: string;
-  run_id: string | null;
-  kind: CoworkApprovalKind;
-  payload_json: string;
-  status: CoworkApprovalStatus;
-  decision_reason: string | null;
-  expires_at: string | null;
-  created_at: string;
-  resolved_at: string | null;
-}
-
-export interface CoworkEvent {
-  id: number;
-  task_id: string;
-  run_id: string | null;
-  type: string;
-  payload_json: string;
-  created_at: string;
-}
-
-export interface CoworkTaskDetail {
-  task: CoworkTask;
-  runs: CoworkRun[];
-  steps: CoworkStep[];
-  artifacts: CoworkArtifact[];
-  approvals: CoworkApproval[];
-  events: CoworkEvent[];
-  latest_run: CoworkRun | null;
-}
-
-export interface CoworkProject {
-  id: string;
-  title: string;
-  instructions: string;
-  workspace_roots_json: string;
-  default_template_ids_json: string;
-  model_policy_json: string;
-  data_policy: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface CoworkProjectAsset {
-  id: string;
-  project_id: string;
-  path: string;
-  label: string;
-  source: string;
-  size_bytes: number;
-  created_at: string;
-}
-
-export interface CoworkSchedule {
-  id: string;
-  task_id: string;
-  cron: string;
-  timezone: string;
-  enabled: number;
-  next_run_at: string | null;
-  last_run_at: string | null;
-  missed_policy: string;
-  last_status: string | null;
-  last_error: string | null;
-  last_task_run_id: string | null;
-  created_at: string;
-  updated_at: string;
-}
+import type {
+  CoworkTask,
+  CoworkRun,
+  CoworkStep,
+  CoworkArtifact,
+  CoworkApproval,
+  CoworkEvent,
+  CoworkTaskDetail,
+  CoworkProject,
+  CoworkProjectAsset,
+  CoworkSchedule,
+} from "./cowork-store-types";
 
 export { coworkArtifactSnapshotPath, coworkTaskRoot, coworkTaskStagingRoot } from "./cowork-store-support";
 
@@ -298,6 +197,7 @@ export class CoworkStore {
     permission_mode?: string;
     project_id?: string | null;
     data_policy?: string;
+    model_policy?: Record<string, unknown>;
     inputs?: Record<string, unknown>;
   }): CoworkTask {
     const title = input.title.trim();
@@ -322,9 +222,14 @@ export class CoworkStore {
     const permissionMode = isPermissionMode(input.permission_mode)
       ? input.permission_mode
       : "operate";
-    const dataPolicy = input.data_policy === "cloud" || project?.data_policy === "cloud"
-      ? "cloud"
-      : "local_only";
+    const dataPolicy = project?.data_policy === "local_only"
+      ? "local_only"
+      : input.data_policy === "cloud" || project?.data_policy === "cloud"
+        ? "cloud"
+        : "local_only";
+    const modelPolicy = input.model_policy
+      ? JSON.stringify(input.model_policy)
+      : project?.model_policy_json ?? "{}";
     const id = crypto.randomUUID();
     const stagingRoot = coworkTaskStagingRoot(id);
     fs.mkdirSync(stagingRoot, { recursive: true });
@@ -353,7 +258,7 @@ export class CoworkStore {
         workspaceRoot,
         stagingRoot,
         permissionMode,
-        project?.model_policy_json ?? "{}",
+        modelPolicy,
         dataPolicy,
         JSON.stringify(inputs),
         createdAt,
@@ -457,7 +362,9 @@ export class CoworkStore {
           .all(latestRun.id) as CoworkStep[])
       : [];
     const artifacts = this.db
-      .query("SELECT * FROM cowork_artifacts WHERE task_id = ? ORDER BY created_at DESC")
+      .query(
+        "SELECT * FROM cowork_artifacts WHERE task_id = ? AND status != 'deleted' ORDER BY created_at DESC",
+      )
       .all(taskId) as CoworkArtifact[];
     const approvals = this.db
       .query("SELECT * FROM cowork_approvals WHERE task_id = ? ORDER BY created_at DESC")

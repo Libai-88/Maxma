@@ -4,6 +4,7 @@ import { AlertTriangle, Bell, BellOff, Loader2, Plus, RefreshCw } from 'lucide-r
 import { api } from '@/api'
 import { Button } from '@/components/ui/button'
 import { CoworkActivityDialog } from '@/components/cowork/CoworkActivityDialog'
+import { CoworkApprovalCenter } from '@/components/cowork/CoworkApprovalCenter'
 import { CoworkProjectsRail } from '@/components/cowork/CoworkProjectsRail'
 import { NewProjectDialog } from '@/components/cowork/NewProjectDialog'
 import { NewTaskDialog } from '@/components/cowork/NewTaskDialog'
@@ -30,8 +31,10 @@ export default function CoworkView() {
   const loading = useCoworkStore((state) => state.loading)
   const error = useCoworkStore((state) => state.error)
   const health = useCoworkStore((state) => state.health)
+  const approvals = useCoworkStore((state) => state.approvals)
   const fetchTasks = useCoworkStore((state) => state.fetchTasks)
   const fetchHealth = useCoworkStore((state) => state.fetchHealth)
+  const fetchApprovals = useCoworkStore((state) => state.fetchApprovals)
   const selectTask = useCoworkStore((state) => state.selectTask)
   const [projects, setProjects] = useState<CoworkProject[]>([])
   const [projectsLoading, setProjectsLoading] = useState(true)
@@ -42,6 +45,7 @@ export default function CoworkView() {
   const [creatingTask, setCreatingTask] = useState(false)
   const [creatingProject, setCreatingProject] = useState(false)
   const [activityOpen, setActivityOpen] = useState(false)
+  const [approvalOpen, setApprovalOpen] = useState(false)
   const [activityCount, setActivityCount] = useState(0)
   const [notifyOn, setNotifyOn] = useState(notifyEnabled())
 
@@ -63,9 +67,10 @@ export default function CoworkView() {
   useEffect(() => {
     void fetchTasks()
     void fetchHealth()
+    void fetchApprovals('pending')
     void refreshProjects()
     void api.coworkActivity(30).then((data) => setActivityCount(data.activity.length)).catch(() => { /* 活动数量失败不影响任务 */ })
-  }, [fetchTasks, fetchHealth, refreshProjects])
+  }, [fetchTasks, fetchHealth, fetchApprovals, refreshProjects])
 
   const project = projectId ? projects.find((item) => item.id === projectId) ?? null : null
   const visibleTasks = projectId ? tasks.filter((task) => task.project_id === projectId) : tasks
@@ -135,7 +140,12 @@ export default function CoworkView() {
     }
   }
 
-  const detailPane = <TaskDetail onDownload={(artifact) => void download(artifact)} />
+  const detailPane = (
+    <TaskDetail
+      onDownload={(artifact) => void download(artifact)}
+      onOpenApprovals={() => { setApprovalOpen(true); void fetchApprovals('pending') }}
+    />
+  )
   const projectRoots = project ? parseRoots(project.workspace_roots_json) : []
 
   return (
@@ -156,6 +166,8 @@ export default function CoworkView() {
           onCreateProject={() => setCreatingProject(true)}
           onOpenActivity={() => setActivityOpen(true)}
           activityCount={activityCount}
+          onOpenApprovals={() => setApprovalOpen(true)}
+          approvalCount={approvals.length}
           loading={projectsLoading}
         />
 
@@ -258,6 +270,16 @@ export default function CoworkView() {
         projectId={projectId ?? undefined}
         projectTitle={project?.title}
         projectRoots={projectRoots}
+        projectDataPolicy={project?.data_policy}
+      />
+      <CoworkApprovalCenter
+        open={approvalOpen}
+        onOpenChange={setApprovalOpen}
+        onOpenTask={(taskId) => {
+          setProjectId(null)
+          setProjectTab('tasks')
+          void selectTask(taskId)
+        }}
       />
       <NewProjectDialog open={creatingProject} onOpenChange={setCreatingProject} onCreated={(id) => void onProjectCreated(id)} />
       <CoworkActivityDialog open={activityOpen} onOpenChange={(open) => {

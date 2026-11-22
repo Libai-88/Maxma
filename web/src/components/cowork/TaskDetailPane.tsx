@@ -1,19 +1,16 @@
 import { useEffect, useState } from 'react'
 import {
   AlertTriangle,
+  Archive,
   Check,
-  ChevronDown,
-  ChevronRight,
   ClipboardList,
-  Download,
-  Eye,
-  FileText,
+  HardDrive,
   History,
   Loader2,
   Pause,
-  PencilLine,
   Play,
   RotateCcw,
+  ShieldCheck,
   Square,
   X,
 } from 'lucide-react'
@@ -42,18 +39,20 @@ import type {
   CoworkApproval,
   CoworkArtifact,
   CoworkEvent,
+  CoworkFileBackup,
+  CoworkModelRouteSummary,
   CoworkStep,
 } from '@/types/cowork'
 import {
   baseName,
   ConnectBadge,
-  formatBytes,
   parseCoworkJson,
   SectionCard,
   StatusPill,
   StepIcon,
 } from './taskUi'
 import { CoworkArtifactStudio } from './CoworkArtifactStudio'
+import { ArtifactsList, FileBackupsSection } from './TaskDetailArtifacts'
 
 function PlanApprovalCard({ approval, busy, onDecide }: {
   approval: CoworkApproval
@@ -65,6 +64,7 @@ function PlanApprovalCard({ approval, busy, onDecide }: {
   const steps = Array.isArray(payload.steps) ? payload.steps.map(String) : []
   const [reason, setReason] = useState('')
   const [editing, setEditing] = useState(false)
+  const [showRaw, setShowRaw] = useState(false)
   const [draft, setDraft] = useState(planText)
 
   return (
@@ -88,21 +88,33 @@ function PlanApprovalCard({ approval, busy, onDecide }: {
           onChange={(event) => setDraft(event.target.value)}
           aria-label="修改后的计划"
         />
+      ) : steps.length > 0 ? (
+        <div className="mt-3">
+          <ol className="space-y-1.5">
+            {steps.map((step, index) => (
+              <li key={`${index}-${step}`} className="flex gap-2 text-sm text-foreground">
+                <span className="w-5 shrink-0 text-right font-mono text-xs text-muted-foreground">{index + 1}</span>
+                <span>{step}</span>
+              </li>
+            ))}
+          </ol>
+          <button
+            type="button"
+            className="mt-2 text-caption text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            onClick={() => setShowRaw((value) => !value)}
+          >
+            {showRaw ? '收起原始计划' : '查看原始计划'}
+          </button>
+          {showRaw && (
+            <div className="mt-2 whitespace-pre-wrap rounded-md border border-border bg-background/60 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
+              {planText}
+            </div>
+          )}
+        </div>
       ) : (
         <div className="mt-3 whitespace-pre-wrap rounded-md border border-border bg-background/60 px-3 py-2.5 text-sm leading-relaxed text-foreground">
-          {planText.trim() || '模型没有附带计划正文；步骤见下方。'}
+          模型没有附带计划正文；步骤见下方。
         </div>
-      )}
-
-      {steps.length > 0 && !editing && (
-        <ol className="mt-3 space-y-1.5">
-          {steps.map((step, index) => (
-            <li key={`${index}-${step}`} className="flex gap-2 text-sm text-foreground">
-              <span className="w-5 shrink-0 text-right font-mono text-xs text-muted-foreground">{index + 1}</span>
-              <span>{step}</span>
-            </li>
-          ))}
-        </ol>
       )}
 
       <Input
@@ -242,85 +254,28 @@ function StepsTimeline({ steps }: { steps: CoworkStep[] }) {
   )
 }
 
-function ArtifactsList({ artifacts, onDownload, onPreview }: {
-  artifacts: CoworkArtifact[]
-  onDownload: (artifact: CoworkArtifact) => void
-  onPreview: (artifact: CoworkArtifact) => void
-}) {
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
-  if (artifacts.length === 0) {
-    return <p className="px-4 py-6 text-sm text-muted-foreground">还没有交付物。产物只会落在任务 staging 目录。</p>
+function parseRouteEvent(events: CoworkEvent[]): Record<string, unknown> | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]!
+    if (event.type !== 'cowork.model.routed') continue
+    return event.payload ?? parseCoworkJson(event.payload_json)
   }
-  const groups = new Map<string, CoworkArtifact[]>()
-  for (const artifact of artifacts) {
-    const list = groups.get(artifact.path) ?? []
-    list.push(artifact)
-    groups.set(artifact.path, list)
-  }
-  const ordered = [...groups.values()]
-    .map((list) => list.sort((a, b) => b.version - a.version))
-    .sort((a, b) => (b[0]?.created_at ?? '').localeCompare(a[0]?.created_at ?? ''))
+  return null
+}
 
-  return (
-    <ul className="divide-y divide-border">
-      {ordered.map((versions) => {
-        const current = versions[0]!
-        const older = versions.slice(1)
-        const open = Boolean(expanded[current.path])
-        return (
-          <li key={current.path} className="px-4 py-3">
-            <div className="flex items-center gap-3">
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-panel">
-                <FileText className="size-4 text-muted-foreground" aria-hidden />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-foreground">{baseName(current.path)}</p>
-                <p className="mt-0.5 text-caption text-muted-foreground">
-                  v{current.version} <span aria-hidden>·</span> {formatBytes(current.size_bytes)}
-                  <span className="mx-1.5" aria-hidden>·</span>
-                  <code className="font-mono">{current.sha256.slice(0, 10)}</code>
-                  {older.length > 0 && <span className="ml-1.5">· {older.length} 个历史版本</span>}
-                </p>
-              </div>
-              {['docx', 'xlsx', 'pptx'].includes(current.kind) && (
-                <Button variant="ghost" size="sm" onClick={() => onPreview(current)}>
-                  <PencilLine className="size-3.5" aria-hidden />
-                  预览 / 选改
-                </Button>
-              )}
-              {older.length > 0 && (
-                <Button variant="ghost" size="icon-sm" aria-label="历史版本" onClick={() => setExpanded((state) => ({ ...state, [current.path]: !open }))}>
-                  {open ? <ChevronDown className="size-3.5" aria-hidden /> : <ChevronRight className="size-3.5" aria-hidden />}
-                </Button>
-              )}
-              <Button variant="outline" size="sm" onClick={() => onDownload(current)}>
-                <Download className="size-3.5" aria-hidden />
-                下载
-              </Button>
-            </div>
-            {open && older.length > 0 && (
-              <ul className="mt-2 ml-12 divide-y divide-border rounded-md border border-border bg-muted/25">
-                {older.map((version) => (
-                  <li key={version.id} className="flex items-center gap-2 px-3 py-2">
-                    <span className="shrink-0 rounded-sm border border-border bg-card px-2 py-1.5 font-mono text-caption text-muted-foreground">v{version.version}</span>
-                    <span className="min-w-0 flex-1 truncate text-caption text-muted-foreground">
-                      {formatBytes(version.size_bytes)} <span aria-hidden>·</span> {new Date(version.created_at).toLocaleString('zh-CN')}
-                    </span>
-                    <Button variant="ghost" size="icon-xs" aria-label={`预览 v${version.version}`} onClick={() => onPreview(version)}>
-                      <Eye className="size-3.5" aria-hidden />
-                    </Button>
-                    <Button variant="ghost" size="icon-xs" aria-label={`下载 v${version.version}`} onClick={() => onDownload(version)}>
-                      <Download className="size-3.5" aria-hidden />
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </li>
-        )
-      })}
-    </ul>
-  )
+function routeBadgeText(payload: Record<string, unknown>): string {
+  const location = payload.location === 'local' ? '本机' : '云端'
+  const provider = String(payload.provider_label ?? payload.provider_id ?? '模型')
+  const model = String(payload.model ?? '')
+  const cost = payload.cost && typeof payload.cost === 'object'
+    ? (payload.cost as Record<string, unknown>).estimated_usd
+    : null
+  const costText = location === '本机'
+    ? '无 API 费用'
+    : typeof cost === 'number'
+      ? `约 $${cost.toFixed(4)}`
+      : '价格未知'
+  return `${provider} · ${model} · ${location} · ${costText}`
 }
 
 function describeEvent(event: CoworkEvent): string {
@@ -346,6 +301,11 @@ function describeEvent(event: CoworkEvent): string {
     case 'cowork.tool.failed': return `工具失败 ${payload.tool_name ?? ''}`.trim()
     case 'cowork.tool.decided': return `工具审批：${payload.decision ?? payload.status ?? ''}`
     case 'cowork.artifact.created': return `生成产物 ${payload.path ? baseName(String(payload.path)) : ''}`.trim()
+    case 'cowork.artifact.exported': return `产物已导出 ${payload.path ? baseName(String(payload.path)) : ''}`.trim()
+    case 'cowork.artifact.deleted': return `产物已移入回收站 ${payload.path ? baseName(String(payload.path)) : ''}`.trim()
+    case 'cowork.file.restored': return '文件已从备份恢复'
+    case 'cowork.model.routed': return `模型路由：${payload.provider_label ?? payload.provider_id ?? ''} · ${payload.model ?? ''}`.trim()
+    case 'cowork.approval.batch': return '低风险只读操作已批量批准'
     case 'cowork.answer': return 'Agent 回复已记录'
     case 'cowork.run.paused': return '任务已暂停'
     case 'cowork.run.resumed': return '任务已恢复'
@@ -379,13 +339,20 @@ function EventLog({ events }: { events: CoworkEvent[] }) {
   )
 }
 
-function DetailActions({ onAccept }: { onAccept: () => void }) {
+function DetailActions({ onAccept, onPackage, hasArtifacts }: {
+  onAccept: () => void
+  onPackage: () => void
+  hasArtifacts: boolean
+}) {
   const task = useCoworkStore((state) => state.detail?.task ?? null)
   const action = useCoworkStore((state) => state.action)
   const runTask = useCoworkStore((state) => state.runTask)
   const pauseTask = useCoworkStore((state) => state.pauseTask)
   const resumeTask = useCoworkStore((state) => state.resumeTask)
   const cancelTask = useCoworkStore((state) => state.cancelTask)
+  const [confirming, setConfirming] = useState<'run' | 'resume' | null>(null)
+  const [route, setRoute] = useState<CoworkModelRouteSummary | null>(null)
+  const [routeError, setRouteError] = useState('')
   if (!task) return null
   const busy = Boolean(action)
   const canStart = ['draft', 'failed', 'cancelled'].includes(task.status)
@@ -393,51 +360,126 @@ function DetailActions({ onAccept }: { onAccept: () => void }) {
   const canResume = task.status === 'paused'
   const canCancel = !['completed', 'cancelled'].includes(task.status)
   const canAccept = task.status === 'review'
+  const needsCloudConfirm = task.data_policy !== 'local_only'
+  const taskId = task.id
+  const objectiveChars = task.objective.length
+
+  async function begin(kind: 'run' | 'resume'): Promise<void> {
+    setRouteError('')
+    if (!needsCloudConfirm) {
+      if (kind === 'run') await runTask()
+      else await resumeTask()
+      return
+    }
+    try {
+      const result = await api.previewCoworkModelRoute({
+        task_id: taskId,
+        prompt_chars: Math.max(200, objectiveChars),
+      })
+      setRoute(result.route)
+      setConfirming(kind)
+    } catch (err) {
+      setRouteError(err instanceof Error ? err.message : String(err))
+    }
+  }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {canStart && (
-        <Button size="sm" disabled={busy} onClick={() => void runTask()}>
-          {action === 'run' ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Play className="size-3.5" aria-hidden />}
-          开始执行
-        </Button>
-      )}
-      {canResume && (
-        <Button size="sm" disabled={busy} onClick={() => void resumeTask()}>
-          {action === 'resume' ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <RotateCcw className="size-3.5" aria-hidden />}
-          恢复
-        </Button>
-      )}
-      {canPause && (
-        <Button size="sm" variant="outline" disabled={busy} onClick={() => void pauseTask()}>
-          {action === 'pause' ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Pause className="size-3.5" aria-hidden />}
-          暂停
-        </Button>
-      )}
-      {canAccept && (
-        <Button size="sm" disabled={busy} onClick={onAccept}>
-          {action === 'accept' ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Check className="size-3.5" aria-hidden />}
-          验收完成
-        </Button>
-      )}
-      {canCancel && (
-        <Button size="sm" variant="destructive" disabled={busy} onClick={() => void cancelTask()}>
-          {action === 'cancel' ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Square className="size-3.5" aria-hidden />}
-          取消
-        </Button>
-      )}
-    </div>
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        {canStart && (
+          <Button size="sm" disabled={busy} onClick={() => void begin('run')}>
+            {action === 'run' ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Play className="size-3.5" aria-hidden />}
+            开始执行
+          </Button>
+        )}
+        {canResume && (
+          <Button size="sm" disabled={busy} onClick={() => void begin('resume')}>
+            {action === 'resume' ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <RotateCcw className="size-3.5" aria-hidden />}
+            恢复
+          </Button>
+        )}
+        {canPause && (
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => void pauseTask()}>
+            {action === 'pause' ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Pause className="size-3.5" aria-hidden />}
+            暂停
+          </Button>
+        )}
+        {canAccept && (
+          <Button size="sm" disabled={busy} onClick={onAccept}>
+            {action === 'accept' ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Check className="size-3.5" aria-hidden />}
+            验收完成
+          </Button>
+        )}
+        {hasArtifacts && (
+          <Button size="sm" variant="outline" disabled={busy} onClick={onPackage} title="包含产物、来源清单与 README 的 ZIP">
+            <Archive className="size-3.5" aria-hidden />
+            交付包
+          </Button>
+        )}
+        {canCancel && (
+          <Button size="sm" variant="destructive" disabled={busy} onClick={() => void cancelTask()}>
+            {action === 'cancel' ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Square className="size-3.5" aria-hidden />}
+            取消
+          </Button>
+        )}
+      </div>
+      {routeError && <p className="mt-2 text-caption text-destructive">模型预检失败：{routeError}</p>}
+      <Dialog open={Boolean(confirming)} onOpenChange={(open) => { if (!open) setConfirming(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>发送前确认</DialogTitle>
+            <DialogDescription>
+              {task.data_policy === 'cloud'
+                ? '这个任务允许云端模型。确认后才会开始运行，可能把任务资料发送给云端渠道。'
+                : '确认后开始运行。'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg border border-border bg-panel/50 p-3 text-sm">
+            <p className="font-medium text-foreground">{route ? routeBadgeText({
+              location: route.location,
+              provider_label: route.provider_label,
+              model: route.model,
+              cost: { estimated_usd: route.cost.estimated_usd },
+            }) : '正在检查模型路由…'}</p>
+            {route && <p className="mt-1 text-caption leading-relaxed text-muted-foreground">{route.reason}。{route.cost.note}</p>}
+            {route?.fallback && <p className="mt-1 text-caption text-muted-foreground">已回退：{route.fallback.from_model} → {route.model}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" disabled={busy} onClick={() => setConfirming(null)}>取消</Button>
+            <Button
+              disabled={busy}
+              onClick={() => {
+                const kind = confirming
+                setConfirming(null)
+                if (kind === 'run') void runTask()
+                if (kind === 'resume') void resumeTask()
+              }}
+            >
+              <Play className="size-4" aria-hidden />
+              确认并开始
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 
-export function TaskDetail({ onDownload }: { onDownload: (artifact: CoworkArtifact) => void }) {
+export function TaskDetail({ onDownload, onOpenApprovals }: {
+  onDownload: (artifact: CoworkArtifact) => void
+  onOpenApprovals: () => void
+}) {
   const detail = useCoworkStore((state) => state.detail)
   const detailLoading = useCoworkStore((state) => state.detailLoading)
   const action = useCoworkStore((state) => state.action)
   const connection = useCoworkStore((state) => state.connection)
+  const fileBackups = useCoworkStore((state) => state.fileBackups)
   const decideApproval = useCoworkStore((state) => state.decideApproval)
   const refreshDetail = useCoworkStore((state) => state.refreshDetail)
   const acceptTask = useCoworkStore((state) => state.acceptTask)
+  const restoreFileBackup = useCoworkStore((state) => state.restoreFileBackup)
+  const requestArtifactExport = useCoworkStore((state) => state.requestArtifactExport)
+  const requestArtifactDelete = useCoworkStore((state) => state.requestArtifactDelete)
   const [studio, setStudio] = useState<CoworkArtifact | null>(null)
   const [acceptOpen, setAcceptOpen] = useState(false)
   const [memoryDraft, setMemoryDraft] = useState('')
@@ -445,6 +487,8 @@ export function TaskDetail({ onDownload }: { onDownload: (artifact: CoworkArtifa
   const [acceptBusy, setAcceptBusy] = useState(false)
   const [acceptError, setAcceptError] = useState('')
   const [acceptNote, setAcceptNote] = useState('')
+  const [actionNote, setActionNote] = useState('')
+  const [packageBusy, setPackageBusy] = useState(false)
   const detailArtifacts = detail?.artifacts
 
   // 产物 SSE 只刷新 detail；打开中的弹层要跟随同一路径的最新版本，
@@ -504,6 +548,48 @@ export function TaskDetail({ onDownload }: { onDownload: (artifact: CoworkArtifa
   }
 
 
+  async function exportArtifact(artifact: CoworkArtifact): Promise<void> {
+    setActionNote('')
+    const approval = await requestArtifactExport(artifact.id)
+    if (!approval) return
+    setActionNote(`已创建导出审批：${baseName(artifact.path)}。在审批中心确认后才会写入工作区。`)
+    onOpenApprovals()
+  }
+
+  async function deleteArtifact(artifact: CoworkArtifact): Promise<void> {
+    setActionNote('')
+    const approval = await requestArtifactDelete(artifact.id)
+    if (!approval) return
+    setActionNote(`已创建删除审批：${baseName(artifact.path)}。确认后产物移入任务回收站，可恢复。`)
+    onOpenApprovals()
+  }
+
+  async function downloadPackage(): Promise<void> {
+    if (!detail || packageBusy) return
+    setPackageBusy(true)
+    setActionNote('')
+    try {
+      const url = await api.prepareCoworkPackage(detail.task.id)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.rel = 'noopener'
+      anchor.download = `${detail.task.title}-交付包.zip`
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+    } catch (err) {
+      setActionNote(err instanceof Error ? err.message : String(err))
+    } finally {
+      setPackageBusy(false)
+    }
+  }
+
+  async function restore(backup: CoworkFileBackup): Promise<void> {
+    setActionNote('')
+    await restoreFileBackup(backup.id)
+    setActionNote(`已恢复 ${baseName(backup.original_path)}；恢复前版本也已自动备份。`)
+  }
+
   if (detailLoading && !detail) {
     return (
       <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
@@ -522,11 +608,13 @@ export function TaskDetail({ onDownload }: { onDownload: (artifact: CoworkArtifa
 
   const { task, steps, artifacts, events, latest_run: latestRun } = detail
   const pending = pendingApprovals(detail)
+  const routeEvent = parseRouteEvent(events)
   // 审批卡只在对应状态显示；旧轮/已恢复任务可能残留 pending 记录，不能当作可操作。
   const planApproval = task.status === 'awaiting_plan' ? pending.find(isPlanApproval) ?? null : null
   const toolApprovals = task.status === 'awaiting_approval'
     ? pending.filter((approval) => !isPlanApproval(approval))
     : []
+  const artifactApprovals = pending.filter((approval) => approval.kind === 'export' || approval.kind === 'delete')
   const busy = Boolean(action)
 
   return (
@@ -537,6 +625,14 @@ export function TaskDetail({ onDownload }: { onDownload: (artifact: CoworkArtifa
             <div className="flex flex-wrap items-center gap-2">
               <StatusPill status={task.status} />
               <ConnectBadge connection={connection} />
+              <span className={
+                task.data_policy === 'local_only'
+                  ? 'inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2 py-1 text-caption text-success'
+                  : 'inline-flex items-center gap-1 rounded-full border border-border bg-panel px-2 py-1 text-caption text-muted-foreground'
+              }>
+                {task.data_policy === 'local_only' ? <HardDrive className="size-3" aria-hidden /> : <ShieldCheck className="size-3" aria-hidden />}
+                {task.data_policy === 'local_only' ? '仅本地 · 0 云端请求' : '允许云端'}
+              </span>
               {latestRun && (
                 <span className="text-caption text-muted-foreground">
                   第 {latestRun.attempt} 次运行
@@ -546,7 +642,11 @@ export function TaskDetail({ onDownload }: { onDownload: (artifact: CoworkArtifa
             <h1 className="mt-2 text-xl font-semibold tracking-tight text-foreground">{task.title}</h1>
             <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">{task.objective}</p>
           </div>
-          <DetailActions onAccept={openAccept} />
+          <DetailActions
+            onAccept={openAccept}
+            onPackage={() => void downloadPackage()}
+            hasArtifacts={artifacts.length > 0 && !packageBusy}
+          />
         </div>
         <dl className="mt-4 grid gap-2 border-t border-border pt-3 text-caption sm:grid-cols-2">
           <div className="flex min-w-0 gap-2">
@@ -566,6 +666,14 @@ export function TaskDetail({ onDownload }: { onDownload: (artifact: CoworkArtifa
             <dd className="text-foreground">{new Date(task.updated_at).toLocaleString('zh-CN')}</dd>
           </div>
         </dl>
+        {routeEvent && (
+          <p className="mt-3 rounded-md border border-border bg-panel/50 px-3 py-2 text-caption text-muted-foreground">
+            <span className="font-medium text-foreground">本次模型路由</span>
+            <span className="mx-1.5" aria-hidden>·</span>
+            {routeBadgeText(routeEvent)}
+            {typeof routeEvent.reason === 'string' && <><br />{routeEvent.reason}</>}
+          </p>
+        )}
         {latestRun?.error && (
           <p className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
             {latestRun.error}
@@ -575,6 +683,19 @@ export function TaskDetail({ onDownload }: { onDownload: (artifact: CoworkArtifa
 
       {acceptNote && (
         <p className="rounded-md border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">{acceptNote}</p>
+      )}
+      {actionNote && (
+        <p className="rounded-md border border-border bg-panel/50 px-3 py-2 text-sm text-foreground">{actionNote}</p>
+      )}
+      {artifactApprovals.length > 0 && (
+        <button
+          type="button"
+          onClick={onOpenApprovals}
+          className="flex items-center justify-between gap-3 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-left text-sm text-foreground transition-colors duration-fast ease-standard hover:bg-primary/10"
+        >
+          <span>{artifactApprovals.length} 个导出/删除审批等待确认；确认后才会改动工作区文件。</span>
+          <span className="shrink-0 text-caption text-primary">打开审批中心 →</span>
+        </button>
       )}
 
       {planApproval && (
@@ -599,8 +720,15 @@ export function TaskDetail({ onDownload }: { onDownload: (artifact: CoworkArtifa
             <StepsTimeline steps={steps} />
           </SectionCard>
           <SectionCard title="交付物" extra={<span className="text-caption text-muted-foreground">{artifacts.length} 个</span>}>
-            <ArtifactsList artifacts={artifacts} onDownload={onDownload} onPreview={setStudio} />
+            <ArtifactsList
+              artifacts={artifacts}
+              onDownload={onDownload}
+              onPreview={setStudio}
+              onExport={(artifact) => void exportArtifact(artifact)}
+              onDelete={(artifact) => void deleteArtifact(artifact)}
+            />
           </SectionCard>
+          <FileBackupsSection backups={fileBackups} busy={busy} onRestore={(backup) => void restore(backup)} />
         </div>
         <div className="flex min-w-0 flex-col gap-4">
           <SectionCard title="运行日志">

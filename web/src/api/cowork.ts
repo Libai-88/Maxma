@@ -8,9 +8,13 @@
 import type {
   CreateCoworkTaskInput,
   CoworkActivityEvent,
+  CoworkApprovalList,
   CoworkConnectorList,
+  CoworkFileBackup,
   CoworkHealth,
   CoworkMemoryFact,
+  CoworkModelPolicy,
+  CoworkModelRouteSummary,
   CoworkProject,
   CoworkProjectAsset,
   CoworkProjectDetail,
@@ -43,6 +47,10 @@ export function coworkArtifactUrl(taskId: string, artifactId: string, token: str
   const params = new URLSearchParams({ token })
   if (inline) params.set('inline', '1')
   return `${getApiBase()}/cowork/tasks/${encodeURIComponent(taskId)}/artifacts/${encodeURIComponent(artifactId)}/file?${params.toString()}`
+}
+
+export function coworkPackageUrl(taskId: string, token: string): string {
+  return `${getApiBase()}/cowork/tasks/${encodeURIComponent(taskId)}/package?${new URLSearchParams({ token }).toString()}`
 }
 
 export function createCoworkApi({ request, getToken, ensureTokenLoaded }: CoworkApiDeps) {
@@ -100,6 +108,57 @@ export function createCoworkApi({ request, getToken, ensureTokenLoaded }: Cowork
         method: 'POST',
         body: JSON.stringify(decision),
       }),
+
+    // ── M4 审批中心 / 数据边界 / 交付 ──
+    listCoworkApprovals: (options: { status?: string; taskId?: string } = {}) => {
+      const params = new URLSearchParams({ status: options.status ?? 'pending' })
+      if (options.taskId) params.set('task_id', options.taskId)
+      return request<CoworkApprovalList>(`/cowork/approvals?${params.toString()}`)
+    },
+
+    batchCoworkApprovals: (ids: string[]) =>
+      request<{ approved: number }>('/cowork/approvals/batch', {
+        method: 'POST',
+        body: JSON.stringify({ ids }),
+      }),
+
+    previewCoworkModelRoute: (input: {
+      project_id?: string | null
+      task_id?: string
+      data_policy?: string
+      model_policy?: CoworkModelPolicy
+      prompt_chars?: number
+      long_document?: boolean
+    }) =>
+      request<{ route: CoworkModelRouteSummary; data_policy: string }>('/cowork/model-route/preview', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+
+    requestCoworkArtifactExport: (taskId: string, artifactId: string) =>
+      request<{ approval: CoworkApprovalList['approvals'][number] }>(
+        `/cowork/tasks/${encodeURIComponent(taskId)}/artifacts/${encodeURIComponent(artifactId)}/export`,
+        { method: 'POST', body: JSON.stringify({}) },
+      ),
+
+    requestCoworkArtifactDelete: (taskId: string, artifactId: string) =>
+      request<{ approval: CoworkApprovalList['approvals'][number] }>(
+        `/cowork/tasks/${encodeURIComponent(taskId)}/artifacts/${encodeURIComponent(artifactId)}/delete`,
+        { method: 'POST', body: JSON.stringify({}) },
+      ),
+
+    listCoworkFileBackups: (taskId: string) =>
+      request<{ backups: CoworkFileBackup[] }>(`/cowork/tasks/${encodeURIComponent(taskId)}/file-backups`),
+
+    restoreCoworkFileBackup: (backupId: string) =>
+      request<{ backup: CoworkFileBackup }>(`/cowork/file-backups/${encodeURIComponent(backupId)}/restore`, {
+        method: 'POST',
+      }),
+
+    prepareCoworkPackage: async (taskId: string): Promise<string> => {
+      await ensureTokenLoaded()
+      return coworkPackageUrl(taskId, getToken())
+    },
 
     // ── M3 项目 / 资产 / 记忆 ──
     listCoworkProjects: () => request<{ projects: CoworkProject[] }>('/cowork/projects'),

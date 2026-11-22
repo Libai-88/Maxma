@@ -24,9 +24,9 @@ import {
   CoworkStore,
 } from "./cowork-store";
 import type { CoworkTask } from "./cowork-store";
-import { artifactFromToolResult } from "./cowork-artifacts";
+import { recordToolCompletion } from "./cowork-tool-artifacts";
 import { buildCoworkPrompt, buildCoworkResumePrompt } from "./cowork-prompt";
-import { resolveCoworkModelParams } from "./cowork-model";
+import { resolveCoworkModelRoute, type CoworkModelRoute } from "./cowork-model";
 import { finishCoworkRun } from "./cowork-run-finish";
 import { asRecord, str, truncate } from "./cowork-utils";
 
@@ -170,13 +170,38 @@ export class CoworkOrchestrator {
     });
   }
 
-  private modelParams(): Record<string, unknown> {
-    return resolveCoworkModelParams();
+  private async modelRoute(task: CoworkTask): Promise<CoworkModelRoute> {
+    let assetsCount = 0;
+    try {
+      const inputs = asRecord(JSON.parse(task.inputs_json || "{}") as unknown);
+      assetsCount = Array.isArray(inputs.assets) ? inputs.assets.length : 0;
+    } catch {
+      assetsCount = 0;
+    }
+    const promptChars = task.objective.length + task.inputs_json.length + 6000;
+    return resolveCoworkModelRoute({
+      dataPolicy: task.data_policy,
+      modelPolicyJson: task.model_policy_json,
+      promptChars,
+      longDocument: assetsCount > 0 || promptChars > 20_000,
+    });
   }
 
   private async ensureSession(task: CoworkTask, mode: "start" | "resume", planPhase: boolean): Promise<void> {
     if (!task.session_id) throw new CoworkConflictError("任务没有 session_id");
     const sessionId = task.session_id;
+    const route = await this.modelRoute(task);
+    this.store.appendEvent(task.id, this.store.getLatestRun(task.id)?.id ?? null, "cowork.model.routed", {
+      provider_id: route.provider_id,
+      provider_label: route.provider_label,
+      model: route.model,
+      location: route.location,
+      profile: route.profile,
+      reason: route.reason,
+      fallback: route.fallback,
+      cost: route.cost,
+      data_policy: task.data_policy,
+    });
     const existing = this.sessions.has(sessionId);
     const persisted = mode === "resume" && !existing ? findPersistedSession(sessionId) : null;
     const resumeSessionId = mode === "resume" && (existing || persisted) ? sessionId : undefined;
@@ -193,7 +218,7 @@ export class CoworkOrchestrator {
         resume: mode === "resume",
       }),
       in_memory: false,
-      ...this.modelParams(),
+      ...route.params,
       ...(resumeSessionId ? { resume_session_id: resumeSessionId } : { session_id: sessionId }),
     };
     const reply = await this.rpcCreate(params);
@@ -749,23 +774,7 @@ export class CoworkOrchestrator {
   }
 
   private onToolEnd(taskId: string, runId: string, payload: Record<string, unknown>, input = ""): void {
-    const toolName = str(payload.tool_name);
-    this.store.appendEvent(taskId, runId, "cowork.tool.completed", {
-      tool_name: toolName,
-      tool_call_id: str(payload.tool_call_id),
-      elapsed: payload.elapsed ?? null,
-    });
-    const task = this.store.getTask(taskId);
-    const artifact = artifactFromToolResult(toolName, payload.output, input, task.staging_root);
-    if (!artifact) return;
-    this.store.addArtifact({
-      taskId,
-      runId,
-      path: artifact.path,
-      kind: artifact.kind,
-      status: "staged",
-      sources: [taskId],
-    });
+    recordToolCompletion(this.store, taskId, runId, payload, input);
   }
 
   private onDone(taskId: string, runId: string): void {

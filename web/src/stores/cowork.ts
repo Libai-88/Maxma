@@ -12,8 +12,11 @@ import { createLogger } from '@/utils/logger'
 import { maybeNotifyCowork } from '@/utils/coworkNotify'
 import type {
   CoworkApproval,
+  CoworkApprovalView,
   CoworkEvent,
+  CoworkFileBackup,
   CoworkHealth,
+  CoworkModelPolicy,
   CoworkTask,
   CoworkTaskDetail,
 } from '@/types/cowork'
@@ -46,6 +49,8 @@ export const COWORK_STEP_LABELS: Record<string, string> = {
 export const COWORK_APPROVAL_LABELS: Record<string, string> = {
   plan: '计划',
   tool: '工具操作',
+  export: '导出到工作区',
+  delete: '删除产物',
 }
 
 export function coworkStatusLabel(status: string): string {
@@ -85,6 +90,9 @@ interface CoworkState {
   tasks: CoworkTask[]
   detail: CoworkTaskDetail | null
   selectedId: string | null
+  approvals: CoworkApprovalView[]
+  approvalsLoading: boolean
+  fileBackups: CoworkFileBackup[]
   loading: boolean
   detailLoading: boolean
   error: string
@@ -93,6 +101,12 @@ interface CoworkState {
   lastEventId: number
   fetchHealth: () => Promise<void>
   fetchTasks: () => Promise<void>
+  fetchApprovals: (status?: string) => Promise<void>
+  batchApprove: (ids: string[]) => Promise<void>
+  fetchFileBackups: () => Promise<void>
+  restoreFileBackup: (id: string) => Promise<void>
+  requestArtifactExport: (artifactId: string) => Promise<CoworkApprovalView | null>
+  requestArtifactDelete: (artifactId: string) => Promise<CoworkApprovalView | null>
   selectTask: (id: string | null) => Promise<void>
   refreshDetail: () => Promise<void>
   createTask: (input: {
@@ -101,6 +115,8 @@ interface CoworkState {
     workspace_root: string
     permission_mode?: string
     project_id?: string | null
+    data_policy?: string
+    model_policy?: CoworkModelPolicy
   }) => Promise<CoworkTask>
   runTask: () => Promise<void>
   pauseTask: () => Promise<void>
@@ -250,7 +266,7 @@ export const useCoworkStore = create<CoworkState>()((set, get) => {
     stopStream()
     streamedTaskId = id
     if (!id) {
-      set({ selectedId: null, detail: null, connection: 'idle', lastEventId: 0 })
+      set({ selectedId: null, detail: null, connection: 'idle', lastEventId: 0, fileBackups: [] })
       return
     }
     set({
@@ -259,8 +275,10 @@ export const useCoworkStore = create<CoworkState>()((set, get) => {
       detailLoading: true,
       connection: 'connecting',
       lastEventId: 0,
+      fileBackups: [],
     })
     await get().refreshDetail()
+    await get().fetchFileBackups()
     await connect(id)
   }
 
@@ -281,6 +299,9 @@ export const useCoworkStore = create<CoworkState>()((set, get) => {
     tasks: [],
     detail: null,
     selectedId: null,
+    approvals: [],
+    approvalsLoading: false,
+    fileBackups: [],
     loading: false,
     detailLoading: false,
     error: '',
@@ -290,6 +311,75 @@ export const useCoworkStore = create<CoworkState>()((set, get) => {
 
     fetchHealth,
     fetchTasks,
+
+    fetchApprovals: async (status = 'pending') => {
+      set({ approvalsLoading: true })
+      try {
+        const result = await api.listCoworkApprovals({ status })
+        set({ approvals: result.approvals })
+      } catch (err) {
+        set({ error: err instanceof Error ? err.message : String(err) })
+      } finally {
+        set({ approvalsLoading: false })
+      }
+    },
+
+    batchApprove: (ids) => withAction('approval:batch', async () => {
+      await api.batchCoworkApprovals(ids)
+      await get().fetchApprovals()
+      await get().refreshDetail()
+      await get().fetchTasks()
+    }),
+
+    fetchFileBackups: async () => {
+      const id = get().selectedId
+      if (!id) {
+        set({ fileBackups: [] })
+        return
+      }
+      try {
+        const result = await api.listCoworkFileBackups(id)
+        if (get().selectedId === id) set({ fileBackups: result.backups })
+      } catch (err) {
+        set({ error: err instanceof Error ? err.message : String(err) })
+      }
+    },
+
+    restoreFileBackup: (id) => withAction(`restore:${id}`, async () => {
+      await api.restoreCoworkFileBackup(id)
+      await get().fetchFileBackups()
+      await get().refreshDetail()
+    }),
+
+    requestArtifactExport: async (artifactId) => {
+      const taskId = get().selectedId
+      if (!taskId) return null
+      try {
+        const { approval } = await api.requestCoworkArtifactExport(taskId, artifactId)
+        set({ error: '' })
+        await get().refreshDetail()
+        await get().fetchApprovals()
+        return approval
+      } catch (err) {
+        set({ error: err instanceof Error ? err.message : String(err) })
+        return null
+      }
+    },
+
+    requestArtifactDelete: async (artifactId) => {
+      const taskId = get().selectedId
+      if (!taskId) return null
+      try {
+        const { approval } = await api.requestCoworkArtifactDelete(taskId, artifactId)
+        set({ error: '' })
+        await get().refreshDetail()
+        await get().fetchApprovals()
+        return approval
+      } catch (err) {
+        set({ error: err instanceof Error ? err.message : String(err) })
+        return null
+      }
+    },
 
     selectTask,
 
@@ -363,6 +453,8 @@ export const useCoworkStore = create<CoworkState>()((set, get) => {
         })
         if (get().selectedId === detail.task.id) set({ detail })
         await get().fetchTasks()
+        await get().fetchApprovals()
+        if (get().selectedId === detail.task.id) await get().fetchFileBackups()
       }),
 
     connect,

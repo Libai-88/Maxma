@@ -1,10 +1,10 @@
-import { Clock3, FolderKanban, ListChecks, Plus } from 'lucide-react'
+import { Clock3, FolderKanban, ListChecks, Plus, ShieldCheck } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { CoworkProject, CoworkTask } from '@/types/cowork'
 
-export function CoworkProjectsRail({ projects, tasks, projectId, onSelectProject, onSelectAll, onCreateProject, onOpenActivity, activityCount, loading }: {
+export function CoworkProjectsRail({ projects, tasks, projectId, onSelectProject, onSelectAll, onCreateProject, onOpenActivity, activityCount, onOpenApprovals, approvalCount, loading }: {
   projects: CoworkProject[]
   tasks: CoworkTask[]
   projectId: string | null
@@ -13,6 +13,8 @@ export function CoworkProjectsRail({ projects, tasks, projectId, onSelectProject
   onCreateProject: () => void
   onOpenActivity: () => void
   activityCount: number
+  onOpenApprovals: () => void
+  approvalCount: number
   loading: boolean
 }) {
   return (
@@ -70,7 +72,20 @@ export function CoworkProjectsRail({ projects, tasks, projectId, onSelectProject
           </div>
         )}
       </div>
-      <div className="shrink-0 border-t border-border p-2">
+      <div className="shrink-0 space-y-0.5 border-t border-border p-2">
+        <button
+          type="button"
+          onClick={onOpenApprovals}
+          className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm text-muted-foreground transition-colors duration-fast ease-standard hover:bg-accent/40 hover:text-foreground"
+        >
+          <ShieldCheck className="size-4 shrink-0" aria-hidden />
+          <span className="min-w-0 flex-1">审批中心</span>
+          {approvalCount > 0 && (
+            <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-1.5 text-micro text-primary">
+              {Math.min(approvalCount, 99)}
+            </span>
+          )}
+        </button>
         <button
           type="button"
           onClick={onOpenActivity}
@@ -79,7 +94,7 @@ export function CoworkProjectsRail({ projects, tasks, projectId, onSelectProject
           <Clock3 className="size-4 shrink-0" aria-hidden />
           <span className="min-w-0 flex-1">活动中心</span>
           {activityCount > 0 && (
-            <span className="rounded-full bg-panel px-1.5 py-0.5 text-micro text-muted-foreground">{Math.min(activityCount, 99)}</span>
+            <span className="rounded-full bg-panel px-2 py-1.5 text-micro text-muted-foreground">{Math.min(activityCount, 99)}</span>
           )}
         </button>
       </div>

@@ -131,20 +131,40 @@ export function TaskListItem({ task, active, onSelect }: { task: CoworkTask; act
 }
 
 export function EmptyState({ onCreate }: { onCreate: () => void }) {
+  const steps = [
+    { title: '选一个文件夹', detail: '只读取这里；源文件不会被直接改。' },
+    { title: '写一句目标', detail: '可以直接套用周报、论文摘要或表格汇总模板。' },
+    { title: '批准计划，再看产物', detail: '先批准再执行；产物在独立 staging，验收后才交付。' },
+  ]
   return (
     <div className="flex h-full items-center justify-center p-6">
-      <div className="max-w-md text-center">
-        <div className="mx-auto flex size-12 items-center justify-center rounded-xl border border-border bg-card">
-          <ClipboardList className="size-5 text-muted-foreground" aria-hidden />
+      <div className="max-w-xl">
+        <div className="text-center">
+          <div className="mx-auto flex size-12 items-center justify-center rounded-xl border border-border bg-card">
+            <ClipboardList className="size-5 text-muted-foreground" aria-hidden />
+          </div>
+          <h2 className="mt-4 text-base font-semibold text-foreground">第一条任务，三步开始</h2>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            不需要配置模型地址或权限文件。选文件夹、写目标、批准计划，就能拿到可回滚的产物。
+          </p>
         </div>
-        <h2 className="mt-4 text-base font-semibold text-foreground">还没有任务</h2>
-        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          给一个目标和一个文件夹。Maxma 会先提交计划，等你批准后再把产物写进任务自己的 staging 目录。
-        </p>
-        <Button className="mt-4" onClick={onCreate}>
-          <Plus className="size-4" aria-hidden />
-          新建任务
-        </Button>
+        <ol className="mt-5 grid gap-2 sm:grid-cols-3">
+          {steps.map((step, index) => (
+            <li key={step.title} className="rounded-lg border border-border bg-card p-3">
+              <span className="flex size-6 items-center justify-center rounded-full border border-border bg-panel font-mono text-caption text-muted-foreground">
+                {index + 1}
+              </span>
+              <p className="mt-2 text-sm font-medium text-foreground">{step.title}</p>
+              <p className="mt-1 text-caption leading-relaxed text-muted-foreground">{step.detail}</p>
+            </li>
+          ))}
+        </ol>
+        <div className="mt-5 flex justify-center">
+          <Button onClick={onCreate}>
+            <Plus className="size-4" aria-hidden />
+            新建第一条任务
+          </Button>
+        </div>
       </div>
     </div>
   )

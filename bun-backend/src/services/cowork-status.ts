@@ -20,6 +20,6 @@ export type CoworkRunStatus = (typeof COWORK_RUN_STATUSES)[number];
 export const COWORK_STEP_STATUSES = ["pending", "running", "completed", "failed", "skipped"] as const;
 export type CoworkStepStatus = (typeof COWORK_STEP_STATUSES)[number];
 
-export type CoworkApprovalKind = "plan" | "tool";
+export type CoworkApprovalKind = "plan" | "tool" | "export" | "delete";
 export const COWORK_APPROVAL_STATUSES = ["pending", "approved", "rejected", "modified", "expired"] as const;
 export type CoworkApprovalStatus = (typeof COWORK_APPROVAL_STATUSES)[number];
