@@ -1,6 +1,6 @@
 # Cowork M4 阶段报告：信任、模型与交付
 
-日期：2026-11-22
+日期：2026-11-22（主体）；2026-11-23（零配置补测）
 分支：`main`
 基线：`2bae7989`（M3）
 实现提交：`73343c6c`（M4 后端 + UI + 专项测试）
@@ -9,18 +9,20 @@
 
 | 出口条件 | 结果 | 证据 |
 |---|---|---|
-| 非技术用户 0 配置完成第一条任务 | **外部阻断，未宣称通过** | UI 从模板到发送前确认全流程跑通；内置 Maxma 免费模型返回 `429 FreeUsageLimitError`，首任务未完成 |
+| 非技术用户 0 配置完成第一条任务 | 通过（本机免费路由组） | 测试机预置 `magpie` 免费路由组；新建任务未手选渠道/模型，预检自动选 `group/never-stuck`（本机、0 USD）；任务 `3db0b901-...` 计划批准后 completed，产物 `m4-free-route-summary.md` 1059 B |
 | `local_only` 任务 0 次云端请求 | 通过 | 真实本地任务 `b518f1ac-8d30-4022-adff-324ec8074dbb` 完成；路由事件 `location=local`、`estimated_usd=0`；本地请求日志全部 `127.0.0.1:4321` |
 | 所有写入可回滚 | 通过（工作区写入） | 导出前自动备份；恢复前再备份；恢复后 SHA-256 一致；删除进 `trash/`，同路径历史版本一起隐藏 |
 | 交付包可发给老师/同事 | 通过 | 真实下载 `5 篇 PDF 热导率汇总-交付包.zip`：产物 + `sources.json` + `README.md`，解压内容完整 |
 
-M4 的信任链已经闭合。唯一未闭合的是“零配置首任务”的最终完成证据，卡在上游免费额度，不是本地代码路径。
+M4 四项出口已闭合。“零配置首任务”补测使用本机 Magpie 免费路由组；该渠道是测试环境预置，不是仓库默认内置渠道。内置 Maxma 免费模型仍受 `429` 额度限制，作为已知限制保留。
+
+Magpie 是本地网关，Maxma 侧只连接 `127.0.0.1:3425`；网关内部是否继续转发上游不在 Maxma 请求日志可见范围。因此本条证明用户侧 0 配置与任务完成，不作为数据不出机的额外强证明；`local_only` 的强证明仍以 4321 本地桩任务为准。
 
 ## 交付内容
 
 ### T4.1 审批中心
 
-- `cowwork-approval-center.ts`：跨任务 `listApprovals`，返回任务、项目、操作类型、风险级别与是否可批量。
+- `cowork-approval-center.ts`：跨任务 `listApprovals`，返回任务、项目、操作类型、风险级别与是否可批量。
 - 批量只允许 `kind=tool + risk_level=low + tool_name∈{read,grep,find,ls,doc_search,doc_read,read_office_file}`；最多 10 项，逐项重新校验。
 - 计划、写入、导出、删除永远逐项确认。
 - UI `CoworkApprovalCenter.tsx`：5 秒轮询待处理数；计划项跳回任务详情审阅；导出/删除展示目标文件与 TTL。
@@ -35,14 +37,14 @@ M4 的信任链已经闭合。唯一未闭合的是“零配置首任务”的�
 
 ### T4.3 模型路由与成本
 
-- `cowwork-model.ts`：`private` / `balanced` / `quality`；长文档（资产或 prompt > 20k 字符）自动质量档。
+- `cowork-model.ts`：`private` / `balanced` / `quality`；长文档（资产或 prompt > 20k 字符）自动质量档。
 - 本机可达优先本机；本机不可达按策略回退或明确失败；`private`/`local_only` 不偷上云。
 - 成本：本机 0 USD；云端按 provider 单价估算；缺价 `estimated_usd=null`，绝不写成 0。
-- 每次运行写 `cowwork.model.routed`，包含 provider/model/location/profile/reason/fallback/cost/data_policy。
+- 每次运行写 `cowork.model.routed`，包含 provider/model/location/profile/reason/fallback/cost/data_policy。
 
 ### T4.4 源文件安全与恢复
 
-- DB v13 新表 `cowwork_file_backups`；升级前 `VACUUM INTO` 备份到 `api/data/backups/maxma-before-m4-*.db`。
+- DB v13 新表 `cowork_file_backups`；升级前 `VACUUM INTO` 备份到 `api/data/backups/maxma-before-m4-*.db`。
 - 导出目标必须在任务 `workspace_root` realpath 内；同名自动 `name.vN.ext`；临时文件 + rename 原子写；写完校验 SHA-256。
 - 导出前把目标字节写入任务 `file-backups/` 并登记；恢复前把当前文件再备份为 `pre_restore`。
 - 删除只动 staging 真实产物，移入任务 `trash/`，DB 置 `deleted`；同路径历史版本一起隐藏；回收站不因再次删除被清空。
@@ -50,7 +52,7 @@ M4 的信任链已经闭合。唯一未闭合的是“零配置首任务”的�
 
 ### T4.5 交付包与首次引导
 
-- `cowwork-package.ts`：`fflate.zipSync`；每个 path 取最新非 deleted 版本；重名 basename 加序号。
+- `cowork-package.ts`：`fflate.zipSync`；每个 path 取最新非 deleted 版本；重名 basename 加序号。
 - ZIP 内 `artifacts/<name>`、`sources.json`、`README.md`，文件名 `<安全标题>-交付包.zip`。
 - UI 新建任务模板 chips（整理周报/论文摘要/表格汇总）、模型预检、成本/回退原因、云端确认。
 - EmptyState 三步引导：选文件夹、写目标（可套模板）、批准计划再看产物；明示不需要配置模型地址或权限文件。
@@ -58,7 +60,7 @@ M4 的信任链已经闭合。唯一未闭合的是“零配置首任务”的�
 
 ### T4.6 安全负例与回归
 
-新增 `cowwork-m4.test.ts` 与 `cowwork-m4-routes.test.ts`，覆盖：
+新增 `cowork-m4.test.ts` 与 `cowork-m4-routes.test.ts`，覆盖：
 
 - 路径越界、目录 junction 越界、目标目录不存在；
 - 同名不覆盖、备份、恢复、恢复前备份；
@@ -78,9 +80,11 @@ M4 的信任链已经闭合。唯一未闭合的是“零配置首任务”的�
 5. 恢复后 `restored_at=2026-11-22T16:00:15.713Z`；恢复前自动生成 `pre_restore` 备份 `533d4f1e-...`。
 6. 删除审批批准后 staging 文件消失，`trash/4e96d316-...-m4-验收摘要.txt` 保留 176 B；详情刷新后不再显示该产物。
 7. 真实下载交付包 `5 篇 PDF 热导率汇总-交付包.zip`（1443 B）；条目：`artifacts/m4-验收摘要.txt` 176 B、`sources.json` 587 B、`README.md` 689 B。
-8. 本地闭环：注册仅监听 `127.0.0.1:4321` 的本地模型桩；项目内创建 `M4 本地闭环验证`，提交 2 步计划 → UI 批准 → 本地模型回复 → 验收完成。事件 `cowwork.model.routed` 显示 `provider_id=local-m4-stub`、`location=local`、`estimated_usd=0`、`data_policy=local_only`。
+8. 本地闭环：注册仅监听 `127.0.0.1:4321` 的本地模型桩；项目内创建 `M4 本地闭环验证`，提交 2 步计划 → UI 批准 → 本地模型回复 → 验收完成。事件 `cowork.model.routed` 显示 `provider_id=local-m4-stub`、`location=local`、`estimated_usd=0`、`data_policy=local_only`。
 9. 本地桩请求日志 `artifacts/m4-local-stub-requests.log` 全部 `host=127.0.0.1:4321`，没有任何云端渠道请求。
-10. 零配置云任务 `M4 零配置验证`：新建 → 质量优先 → 发送前确认 → 启动；内置免费模型返回 `429 FreeUsageLimitError: Free usage limit reached`。该条不记为通过。
+10. 零配置云任务 `M4 零配置验证`：新建 → 质量优先 → 发送前确认 → 启动；内置免费模型返回 `429 FreeUsageLimitError: Free usage limit reached`。该条保留为外部额度限制记录。
+11. 零配置补测（2026-11-23）：测试机预置 `magpie`（`http://127.0.0.1:3425/v1`，模型 `group/never-stuck`）。新建 `M4 免费路由首任务`，未手选渠道/模型，预检自动显示“Magpie 免费路由组 · group/never-stuck · 本机模型 · 无 API 费用”；计划批准后任务完成，状态 `completed`，完成时间 `2026-11-22T16:43:36Z`。路由事件 `provider_id=magpie`、`location=local`、`estimated_usd=0`、`data_policy=local_only`。
+12. 补测产物 `m4-free-route-summary.md`：`e2891da7-6a45-4a35-a0ec-ca928e064f3b`，1059 B，SHA-256 `0ecbf7cac60506b0a79cecf1d6f22ccbc7c713b444d6cea3ea9235b014e4713b`；内容列出工作区 6 个文件、5 个 PDF，源工作区未改动。
 
 截图：
 
@@ -93,6 +97,9 @@ M4 的信任链已经闭合。唯一未闭合的是“零配置首任务”的�
 - `artifacts/m4-local-plan.png`
 - `artifacts/m4-local-completed.png`
 - `artifacts/m4-project-workspace.png`
+- `artifacts/m4-free-route-new-task.png`
+- `artifacts/m4-free-route-completed.png`
+- `artifacts/m4-free-route-artifact.png`
 
 ## 自动验证
 
@@ -113,14 +120,15 @@ M4 的信任链已经闭合。唯一未闭合的是“零配置首任务”的�
 
 聚焦用例：
 
-- `cowwork-m4.test.ts`：12 pass / 50 expect
-- `cowwork-m4-routes.test.ts`：3 pass / 33 expect
+- `cowork-m4.test.ts`：12 pass / 50 expect
+- `cowork-m4-routes.test.ts`：3 pass / 33 expect
 - `routes-2.5.test.ts`：22 pass / 435 expect
 - `capabilities.stage=m4-trust`，schedules/connectors/model_router/share/approvals/data_boundary/file_safety 均为 true
 
 ## 已知限制
 
-- 零配置首任务被上游免费额度 `429` 阻断；本轮没有用假成功掩盖。换可用渠道或额度恢复后需补一次真实首任务验收。
+- 内置 Maxma 免费模型仍返回 `429 FreeUsageLimitError`；零配置补测改用测试机预置的 Magpie 免费路由组（`http://127.0.0.1:3425/v1`），该渠道未写入仓库默认 `providers.yaml`，不等于发行包内置。
+- Magpie 是本地网关，Maxma 侧只连接 `127.0.0.1:3425`；网关内部是否转发上游不可见，故本条不作为数据不出机的强证明。
 - 本地闭环用的是 `127.0.0.1` 模型桩，证明路由、工具白名单与 0 云端请求，不证明真实本地模型质量。
 - 安装包 wrapper 未在本轮重建；便携包 smoke 只把阶段断言更新为 `m4-trust` 并做了 PowerShell 语法校验，未实际跑完整便携包。
 - 导出 UI 目前只导到工作区根；后端支持 `target_path` 子目录，但 UI 未提供选择。
@@ -151,4 +159,4 @@ $env:BUN_BIN='D:\NodeGlobal\node_modules\bun\bin\bun.exe'
 & 'D:\mingit\bin\bash.exe' scripts/verify-all-gates.sh
 ```
 
-M4 证据索引：`benchmarks/cowwork/results-m4.json`。
+M4 证据索引：`benchmarks/cowork/results-m4.json`。

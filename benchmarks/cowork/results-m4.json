@@ -1,6 +1,7 @@
 {
   "suite": "cowork-m4-trust",
   "date": "2026-11-22",
+  "closed_date": "2026-11-23",
   "base_commit": "2bae798907afbdeef9b1d9d06eaf787bf9468827",
   "code_commit": "73343c6c634a4410b579b3c88a7f06189e79dfa2",
   "environment": {
@@ -73,10 +74,14 @@
     },
     {
       "id": "exit-zero-config-first-task",
-      "status": "blocked_external",
+      "status": "pass",
       "evidence": [
-        "零配置云任务 M4 零配置验证 走到发送前确认并已启动；内置 Maxma 免费模型返回 429 FreeUsageLimitError: Free usage limit reached",
-        "代码路径与确认弹窗（provider/model/成本未知/回退原因）已跑通；真实首任务完成证据因上游免费额度耗尽而缺失，不记为通过"
+        "零配置补测任务 3db0b901-ad62-4410-85e6-fe1aed61d3a9：测试机预置 magpie 免费路由组，新建任务未手选渠道/模型，预检自动选 group/never-stuck（本机、0 USD）",
+        "UI 计划批准 → 执行 → 验收完成；任务 completed，完成时间 2026-11-22T16:43:36Z",
+        "路由事件 cowork.model.routed：provider_id=magpie、location=local、estimated_usd=0、data_policy=local_only",
+        "产物 e2891da7-6a45-4a35-a0ec-ca928e064f3b：m4-free-route-summary.md，1059 B，sha256=0ecbf7cac60506b0a79cecf1d6f22ccbc7c713b444d6cea3ea9235b014e4713b",
+        "截图 m4-free-route-new-task.png / m4-free-route-completed.png / m4-free-route-artifact.png；证据汇总 artifacts/m4-free-route-evidence.json",
+        "限定：magpie 为测试机预置本机网关，未写入仓库默认 providers.yaml；网关内部转发不在 Maxma 请求日志可见范围，本条不作为数据不出机的额外强证明"
       ]
     }
   ],
@@ -98,6 +103,9 @@
     "artifacts/m4-package-button.png",
     "artifacts/m4-local-plan.png",
     "artifacts/m4-local-completed.png",
-    "artifacts/m4-project-workspace.png"
+    "artifacts/m4-project-workspace.png",
+    "artifacts/m4-free-route-new-task.png",
+    "artifacts/m4-free-route-completed.png",
+    "artifacts/m4-free-route-artifact.png"
   ]
 }

@@ -1,0 +1,63 @@
+{
+  "suite": "cowork-m4-zero-config",
+  "checked_at": "2026-11-23T00:43:36+08:00",
+  "task": {
+    "id": "3db0b901-ad62-4410-85e6-fe1aed61d3a9",
+    "title": "M4 免费路由首任务",
+    "project_id": "0ca37d64-bd1d-48e6-9c0b-4ecb4250b2f8",
+    "status": "completed",
+    "completed_at": "2026-11-22T16:43:36Z",
+    "permission_mode": "operate",
+    "data_policy": "local_only",
+    "model_policy": {
+      "profile": "private"
+    }
+  },
+  "model_route": {
+    "provider_id": "magpie",
+    "provider_label": "Magpie 免费路由组",
+    "model": "group/never-stuck",
+    "location": "local",
+    "profile": "private",
+    "reason": "优先本机模型",
+    "fallback": null,
+    "cost": {
+      "currency": "USD",
+      "prompt_tokens": 1557,
+      "max_output_tokens": 8192,
+      "input_usd_per_1k": 0,
+      "output_usd_per_1k": 0,
+      "estimated_usd": 0,
+      "note": "本机模型，无 API 费用"
+    }
+  },
+  "artifact": {
+    "id": "e2891da7-6a45-4a35-a0ec-ca928e064f3b",
+    "kind": "markdown",
+    "path": "D:\\Temp\\maxma-m3a-data\\api\\data\\cowork\\tasks\\3db0b901-ad62-4410-85e6-fe1aed61d3a9\\staging\\m4-free-route-summary.md",
+    "version": 1,
+    "size_bytes": 1059,
+    "sha256": "0ecbf7cac60506b0a79cecf1d6f22ccbc7c713b444d6cea3ea9235b014e4713b"
+  },
+  "ui_evidence": {
+    "model_preview": "新建任务对话框自动显示 Magpie 免费路由组 · group/never-stuck · 本机模型 · 无 API 费用；用户未手选渠道或模型",
+    "approval": "计划在 UI 中提交并批准；审批备注为“零配置免费路由组验收：工作区只读，产物只写 staging。”",
+    "acceptance": "任务在 UI 中验收完成，状态 completed；交付物列表显示 m4-free-route-summary.md（1.0 KB）"
+  },
+  "workspace_check": {
+    "root": "D:\\Temp\\maxma-m3a-ws",
+    "file_count": 6,
+    "pdf_count": 5,
+    "source_modified": false,
+    "result": "摘要列出 6 个文件（paper-1.pdf ~ paper-5.pdf 与 m4-验收摘要.txt），PDF 5 个；任务只新增 staging 交付物"
+  },
+  "screenshots": [
+    "artifacts/m4-free-route-new-task.png",
+    "artifacts/m4-free-route-completed.png",
+    "artifacts/m4-free-route-artifact.png"
+  ],
+  "caveats": [
+    "provider magpie 是测试机上预置的免费路由组（base_url http://127.0.0.1:3425/v1），未写入仓库默认 providers.yaml；本条证明用户侧 0 配置流程，不等于应用随包内置该渠道。",
+    "Magpie 是本地网关；Maxma 侧只连接 127.0.0.1:3425，网关内部是否继续转发上游不在 Maxma 请求日志可见范围。因此本条不作为数据不出机的强证明；local_only 的强证明仍是 127.0.0.1:4321 桩任务与全量本地请求日志。"
+  ]
+}
