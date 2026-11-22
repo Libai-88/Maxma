@@ -57,6 +57,14 @@ foreach ($name in $configNames) {
     }
 }
 
+# Cowork 任务的 staging 产物与 DB 记录必须成套备份：只恢复 DB 会让产物记录指向空文件。
+$coworkDir = Join-Path $DataDir "cowork"
+if (Test-Path -LiteralPath $coworkDir) {
+    $coworkDest = Join-Path $payload "cowork"
+    New-Item -ItemType Directory -Force -Path $coworkDest | Out-Null
+    Copy-Item -Path (Join-Path $coworkDir "*") -Destination $coworkDest -Recurse -Force
+}
+
 # 人设/规则模板是仓库配置，不是 data/ 下的运行时凭据；备份到 payload/config。
 $personas = Join-Path $RepoRoot "config\personas"
 if (Test-Path -LiteralPath $personas) {

@@ -26,6 +26,7 @@ import { browserActTool, browserNavigateTool, browserReadTool } from "../tools/b
 import { registerRememberMemoryTool } from "../tools/remember-memory";
 import { readOfficeFileTool, writeOfficeFileTool } from "../tools/office";
 import { canvasApplyTool, canvasExportTool, canvasReadTool, type CanvasToolContext } from "../tools/canvas";
+import { coworkUpdateStepsTool } from "../tools/cowork";
 import { codeDefinitionTool, codeDiagnosticsTool, codeReferencesTool, codeSearchTool, codeSymbolsTool } from "../tools/code";
 import { applyPatchTool } from "../tools/patch";
 import { webFetchTool, webSearchTool } from "../tools/web";
@@ -64,6 +65,11 @@ export function buildPiCustomTools(
   extra: ToolDefinition[] = [],
   /** 画布工具需要真实会话与事件出口；缺省时不注册，避免静态/测试环境误发命令。 */
   canvas?: CanvasToolContext,
+  /** Cowork 的写根与步骤事件出口；只有隔离会话需要。 */
+  options?: {
+    writeRoots?: string[];
+    cowork?: { sessionId: string; sendEvent: CanvasToolContext["sendEvent"] };
+  },
 ): ToolDefinition[] {
   const descriptors: MaxmaToolDescriptor[] = [
     registerRememberMemoryTool(),
@@ -85,7 +91,8 @@ export function buildPiCustomTools(
     codeReferencesTool(),
     ...(cwd ? [codeSymbolsTool(cwd), codeDiagnosticsTool(cwd), applyPatchTool(cwd)] : []),
     ...(cwd ? [readOfficeFileTool(cwd)] : []),
-    ...(cwd ? [writeOfficeFileTool(cwd)] : []),
+    ...(cwd ? [writeOfficeFileTool(cwd, options?.writeRoots)] : []),
+    ...(options?.cowork ? [coworkUpdateStepsTool(options.cowork)] : []),
     ...(canvas ? [
       canvasReadTool(canvas),
       canvasApplyTool(canvas),
@@ -93,4 +100,21 @@ export function buildPiCustomTools(
     ] : []),
   ];
   return [...descriptors.map(adaptDescriptorToPi), ...extra];
+}
+
+/**
+ * 会话级工具集装配：把子 Agent、Cowork 写根与步骤工具按 create_session 参数接好。
+ * bridge 只保留一次调用，避免会话装配细节继续膨胀主流程。
+ */
+export function buildSessionCustomTools(
+  cwd: string | undefined,
+  subagentTool: ToolDefinition | undefined,
+  session: CanvasToolContext,
+  params: Record<string, unknown>,
+  writeRoots?: string[],
+): ToolDefinition[] {
+  return buildPiCustomTools(cwd, subagentTool ? [subagentTool] : [], session, {
+    ...(writeRoots !== undefined ? { writeRoots } : {}),
+    ...(params.cowork === true ? { cowork: session } : {}),
+  });
 }

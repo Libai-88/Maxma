@@ -22,6 +22,19 @@ function resolveWorkspaceFile(cwd: string, requestedPath: string): string {
   return absolute;
 }
 
+/** Cowork 的写根可能与 cwd 分离；显式写根存在时只允许落在这几个根内。 */
+function resolveWritableFile(cwd: string, requestedPath: string, writeRoots?: string[]): string {
+  if (!writeRoots || writeRoots.length === 0) return resolveWorkspaceFile(cwd, requestedPath);
+  const absolute = path.resolve(cwd, requestedPath);
+  const roots = writeRoots.map((root) => path.resolve(root));
+  const inside = roots.some((root) => {
+    const relative = path.relative(root, absolute);
+    return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+  });
+  if (!inside) throw new Error("写入目标必须在任务 staging 目录内。");
+  return absolute;
+}
+
 function limitText(text: string, maxChars: number): string {
   if (text.length <= maxChars) return text;
   return `${text.slice(0, maxChars)}\n\n[内容已截断，原始字符数：${text.length}]`;
@@ -443,7 +456,7 @@ export function readOfficeFileTool(cwd: string): MaxmaToolDescriptor {
   };
 }
 
-export function writeOfficeFileTool(cwd: string): MaxmaToolDescriptor {
+export function writeOfficeFileTool(cwd: string, writeRoots?: string[]): MaxmaToolDescriptor {
   return {
     name: "write_office_file",
     label: "Write Office File",
@@ -476,7 +489,7 @@ export function writeOfficeFileTool(cwd: string): MaxmaToolDescriptor {
       try {
         const requestedPath = String(params.path ?? "").trim();
         if (!requestedPath) return result("path 不能为空。", { ok: false });
-        const absolutePath = resolveWorkspaceFile(cwd, requestedPath);
+        const absolutePath = resolveWritableFile(cwd, requestedPath, writeRoots);
         const extension = path.extname(absolutePath).toLowerCase();
         const overwrite = params.overwrite === true;
         if (!overwrite && await fs.stat(absolutePath).then(() => true).catch(() => false)) {
@@ -495,7 +508,7 @@ export function writeOfficeFileTool(cwd: string): MaxmaToolDescriptor {
           return result("支持的输出格式：DOCX、XLSX、CSV、TSV、TXT、Markdown、JSON、YAML。", { ok: false });
         }
         await fs.writeFile(absolutePath, bytes);
-        return result(`已写入 ${path.relative(cwd, absolutePath)}`, { ok: true, path: path.relative(cwd, absolutePath), format: extension.slice(1) });
+        return result(`已写入 ${absolutePath}`, { ok: true, path: absolutePath, format: extension.slice(1) });
       } catch (error) {
         return result(`写入失败：${error instanceof Error ? error.message : String(error)}`, { ok: false });
       }

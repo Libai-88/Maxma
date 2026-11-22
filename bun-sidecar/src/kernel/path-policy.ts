@@ -43,6 +43,9 @@ interface PolicyRoot {
 export interface PathPolicyOptions {
   roots: string[];
   allowlist?: string[];
+  /** Cowork 等场景的独立写根；不传时沿用 roots（保持旧会话语义）。 */
+  writeRoots?: string[];
+  writeAllowlist?: string[];
   cwd?: string;
 }
 
@@ -151,18 +154,22 @@ function nearestExistingAncestor(candidate: string): string | null {
 
 export class PathPolicy {
   private readonly roots: PolicyRoot[];
+  private readonly writeRoots: PolicyRoot[];
   private readonly cwd: string;
 
   constructor(options: PathPolicyOptions) {
-    const roots = [...options.roots, ...(options.allowlist ?? [])]
-      .map(normalizeRoot)
-      .filter((root): root is PolicyRoot => root !== null);
-    // 去重：同一个根同时以词法和 realpath 出现时只保留一份。
-    const unique: PolicyRoot[] = [];
-    for (const root of roots) {
-      if (!unique.some((item) => comparePath(item.real) === comparePath(root.real))) unique.push(root);
-    }
-    this.roots = unique;
+    const toRoots = (candidates: string[]): PolicyRoot[] => {
+      const unique: PolicyRoot[] = [];
+      for (const root of candidates.map(normalizeRoot).filter((root): root is PolicyRoot => root !== null)) {
+        if (!unique.some((item) => comparePath(item.real) === comparePath(root.real))) unique.push(root);
+      }
+      return unique;
+    };
+    this.roots = toRoots([...options.roots, ...(options.allowlist ?? [])]);
+    // writeRoots 是“显式独立写根”：传入空数组表示 fail-closed，而不是退回 roots。
+    this.writeRoots = options.writeRoots === undefined
+      ? this.roots
+      : toRoots([...options.writeRoots, ...(options.writeAllowlist ?? [])]);
     try {
       this.cwd = fs.realpathSync.native(path.resolve(options.cwd ?? process.cwd()));
     } catch {
@@ -174,22 +181,31 @@ export class PathPolicy {
     return this.roots.length;
   }
 
+  get writeRootCount(): number {
+    return this.writeRoots.length;
+  }
+
   /** 检查一个文件路径。intent=read 时目标必须存在；write 允许目标不存在。 */
   check(rawPath: string, intent: PathIntent = "read"): PathPolicyDecision {
     const syntaxError = validatePathSyntax(rawPath);
     if (syntaxError) return deny("PATH_INVALID", syntaxError, typeof rawPath === "string" ? rawPath : "");
 
     const candidate = path.isAbsolute(rawPath) ? path.resolve(rawPath) : path.resolve(this.cwd, rawPath);
-    if (this.roots.length === 0) {
-      return deny("PATH_OUTSIDE_ROOT", "会话没有可用的授权根，路径策略 fail-closed", candidate);
+    const roots = intent === "write" ? this.writeRoots : this.roots;
+    if (roots.length === 0) {
+      return deny(
+        "PATH_OUTSIDE_ROOT",
+        intent === "write" ? "会话没有可用的写入根，路径策略 fail-closed" : "会话没有可用的授权根，路径策略 fail-closed",
+        candidate,
+      );
     }
 
     // 先按词法位置找根；候选可能通过 realpath 落进另一个根（例如根本身是链接），
     // 因此再按真实路径兜底匹配一次。
-    const lexicalRoot = this.roots.find((root) => isInside(root.lexical, candidate));
+    const lexicalRoot = roots.find((root) => isInside(root.lexical, candidate));
     const candidateReal = safeRealpath(candidate);
     const realRoot = candidateReal
-      ? this.roots.find((root) => isInside(root.real, candidateReal))
+      ? roots.find((root) => isInside(root.real, candidateReal))
       : undefined;
     const root = realRoot ?? lexicalRoot;
     if (!root) {

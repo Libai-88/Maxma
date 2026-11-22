@@ -184,6 +184,23 @@ try {
         Write-Host "[portable-smoke] WARN: externals.json not found; skipping package manifest check"
     }
 
+    # 5d. Cowork M1：能力位、任务路由、前端 chunk 必须同时在产品包里出现。
+    #     只看 /api/capabilities 200 不够——路由可能是误挂的；只看 chunk 也不够——
+    #     后端可能仍报 m0-baseline。三处一起验，才算便携包真的进了 M1。
+    $caps = Wait-HttpJson -Url "$apiBase/capabilities" -Headers $headers -TimeoutSeconds 15
+    $coworkFeature = $caps.features.cowork
+    if (-not $coworkFeature -or -not $coworkFeature.enabled) { throw "cowork feature is not enabled in portable build" }
+    if ([string]$coworkFeature.stage -ne "m1-task-core") {
+        throw "cowork stage mismatch: expected m1-task-core, got '$($coworkFeature.stage)'"
+    }
+    $cwHealth = Wait-HttpJson -Url "$apiBase/cowork/health" -Headers $headers -TimeoutSeconds 15
+    if (-not $cwHealth.enabled) { throw "cowork health reports disabled in portable build" }
+    $cwTasks = Wait-HttpJson -Url "$apiBase/cowork/tasks" -Headers $headers -TimeoutSeconds 15
+    if ($null -eq $cwTasks.tasks) { throw "cowork tasks route returned no tasks array" }
+    $coworkChunk = @(Get-ChildItem -LiteralPath (Join-Path $PortableDir "web\dist\assets") -Filter "CoworkView-*.js" -ErrorAction SilentlyContinue)
+    if ($coworkChunk.Count -lt 1) { throw "portable web dist has no CoworkView chunk" }
+    Write-Host "[portable-smoke] cowork: stage=$($coworkFeature.stage) enabled=$($cwHealth.enabled) chunk=$($coworkChunk[0].Name)"
+
     # 6. providers / mcp/servers
     $providers = Wait-HttpJson -Url "$apiBase/providers" -Headers $headers -TimeoutSeconds 15
     $mcps = Wait-HttpJson -Url "$apiBase/mcp/servers" -Headers $headers -TimeoutSeconds 15

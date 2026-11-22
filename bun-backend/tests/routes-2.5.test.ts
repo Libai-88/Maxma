@@ -475,14 +475,17 @@ describe("capabilities 聚合（阶段 2.5c）", () => {
     expect(feature("extensions").enabled).toBe(true);
     expect(feature("extensions").bundled).toEqual(["maxma-approval", "maxma-blocker", "request-telemetry"]);
     expect(feature("rules").enabled).toBe(true);
-    // Cowork M0：入口默认关闭，且不是用户设置开关；不能把“未发布”说成
-    // “去设置里开启”。子能力也必须是关闭状态。
+    // Cowork M1：任务内核已接入，默认开启（MAXMA_COWORK=0 可整体关闭）。
+    // 它仍不是设置页里的用户开关；未接入的子能力必须保持 false。
     const cowork = feature("cowork");
-    expect(cowork.enabled).toBe(false);
+    expect(cowork.enabled).toBe(true);
     expect(cowork.engine_supported).toBe(true);
     expect(cowork.user_toggleable).toBe(false);
-    expect(cowork.stage).toBe("m0-baseline");
-    for (const key of ["tasks", "artifacts", "pptx", "office_com", "doc_index", "schedules", "connectors", "model_router", "share"]) {
+    expect(cowork.stage).toBe("m1-task-core");
+    for (const key of ["tasks", "artifacts"]) {
+      expect((cowork[key] as Record<string, unknown>).enabled).toBe(true);
+    }
+    for (const key of ["pptx", "office_com", "doc_index", "schedules", "connectors", "model_router", "share"]) {
       expect((cowork[key] as Record<string, unknown>).enabled).toBe(false);
     }
     expect(feature("tools").builtin_count).toBe(7);

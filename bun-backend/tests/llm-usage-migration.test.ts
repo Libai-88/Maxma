@@ -28,14 +28,16 @@ describe("LLM usage schema migration", () => {
     db.query("INSERT INTO schema_version (version, applied_at) VALUES (7, julianday('now'))").run();
     db.close();
 
-    const { initializeDatabase } = await import("../src/db/core");
+    const { initializeDatabase, SCHEMA_VERSION } = await import("../src/db/core");
     initializeDatabase();
 
     const migrated = new Database(dbPath, { readonly: true });
     try {
       const version = migrated.query("SELECT MAX(version) AS version FROM schema_version").get() as { version: number };
       const columns = migrated.query("PRAGMA table_info(llm_usage_calls)").all() as Array<{ name: string }>;
-      expect(version.version).toBe(10);
+      // 迁移链的目标版本是唯一事实源；升级 schema 时这里跟随 SCHEMA_VERSION，
+      // 不再把某个历史版本号写死成“最新”。
+      expect(version.version).toBe(SCHEMA_VERSION);
       expect(columns.map((column) => column.name)).toContain("source_entry_id");
       expect(columns.map((column) => column.name)).toContain("cache_observation_status");
       expect(columns.map((column) => column.name)).toContain("request_shape_hash");

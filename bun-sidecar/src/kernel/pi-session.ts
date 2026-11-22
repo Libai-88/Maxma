@@ -97,6 +97,8 @@ export function buildExtensionFactories(opts: MaxmaSessionOptions): InlineExtens
     cwd,
     roots: opts.allowedRoots && opts.allowedRoots.length > 0 ? opts.allowedRoots : [cwd],
     allowlist: opts.pathAllowlist,
+    ...(opts.writeRoots !== undefined ? { writeRoots: opts.writeRoots } : {}),
+    ...(opts.writeAllowlist !== undefined ? { writeAllowlist: opts.writeAllowlist } : {}),
   });
   extensionFactories.push(createMaxmaPathPolicyExtension(pathPolicy, cwd, opts.sessionId));
   if (opts.requestFingerprintSecret && opts.requestFingerprintEpoch && opts.onRequestTelemetry) {
