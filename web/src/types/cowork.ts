@@ -119,11 +119,122 @@ export interface CoworkHealth {
   active_sessions: number
 }
 
+export interface CoworkProject {
+  id: string
+  title: string
+  instructions: string
+  workspace_roots_json: string
+  default_template_ids_json: string
+  model_policy_json: string
+  data_policy: string
+  created_at: string
+  updated_at: string
+}
+
+export interface CoworkProjectAsset {
+  id: string
+  project_id: string
+  path: string
+  label: string
+  source: string
+  size_bytes: number
+  created_at: string
+}
+
+export interface CoworkMemoryFact {
+  id: string
+  content: string
+  category: string
+  updatedAt: string
+  scope: string
+  source?: string
+}
+
+export interface CoworkProjectEvent {
+  type: string
+  project_id: string
+  payload: Record<string, unknown>
+  created_at: string
+}
+
+export interface CoworkProjectDetail {
+  project: CoworkProject
+  tasks: CoworkTask[]
+  assets: CoworkProjectAsset[]
+  memory: CoworkMemoryFact[]
+  events: CoworkProjectEvent[]
+}
+
+export interface CoworkSchedule {
+  id: string
+  task_id: string
+  task_title: string
+  task_status: string
+  project_id: string | null
+  cron: string
+  timezone: string
+  enabled: number
+  missed_policy: string
+  next_run_at: string | null
+  last_run_at: string | null
+  last_status: string | null
+  last_error: string | null
+  last_task_run_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface CoworkSchedulePreset {
+  id: string
+  label: string
+  cron: string
+}
+
+export interface CoworkScheduleList {
+  schedules: CoworkSchedule[]
+  running: boolean
+  presets: CoworkSchedulePreset[]
+  note: string
+}
+
+export interface CoworkConnector {
+  id: string
+  label: string
+  kind: string
+  configured: boolean
+  status: 'connected' | 'unconfigured' | 'error'
+  read: boolean
+  write: false | 'approval'
+  detail: string
+  tools: string[]
+  recipe?: string
+}
+
+export interface CoworkConnectorRecipe {
+  id: string
+  title: string
+  providers: string[]
+  mode: 'read-only'
+  doc: string
+}
+
+export interface CoworkConnectorList {
+  connectors: CoworkConnector[]
+  recipes: CoworkConnectorRecipe[]
+}
+
+export type CoworkActivityEvent = CoworkEvent & {
+  task_title: string
+  project_id: string | null
+}
+
 export interface CreateCoworkTaskInput {
   title: string
   objective: string
   workspace_root: string
   permission_mode?: string
+  project_id?: string | null
+  data_policy?: string
   inputs?: Record<string, unknown>
 }
 

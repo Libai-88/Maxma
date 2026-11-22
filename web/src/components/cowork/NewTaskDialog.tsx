@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { FolderOpen, Loader2, Plus } from 'lucide-react'
 
 import { api } from '@/api'
@@ -16,7 +16,13 @@ import { Textarea } from '@/components/ui/textarea'
 import { MODE_LABELS, MODE_ORDER } from '@/hooks/useSessionPermissionMode'
 import { useCoworkStore } from '@/stores/cowork'
 
-export function NewTaskDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+export function NewTaskDialog({ open, onOpenChange, projectId, projectTitle, projectRoots = [] }: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  projectId?: string
+  projectTitle?: string
+  projectRoots?: string[]
+}) {
   const createTask = useCoworkStore((state) => state.createTask)
   const [title, setTitle] = useState('')
   const [objective, setObjective] = useState('')
@@ -24,6 +30,12 @@ export function NewTaskDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   const [permission, setPermission] = useState('operate')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!open || workspace) return
+    const first = projectRoots[0]
+    if (first) setWorkspace(first)
+  }, [open, projectRoots, workspace])
 
   function reset(): void {
     setTitle('')
@@ -54,6 +66,7 @@ export function NewTaskDialog({ open, onOpenChange }: { open: boolean; onOpenCha
         objective: objective.trim(),
         workspace_root: workspace.trim(),
         permission_mode: permission,
+        project_id: projectId,
       })
       reset()
       onOpenChange(false)
@@ -70,7 +83,9 @@ export function NewTaskDialog({ open, onOpenChange }: { open: boolean; onOpenCha
         <DialogHeader>
           <DialogTitle>新建任务</DialogTitle>
           <DialogDescription>
-            源工作区只读；产物写入任务自己的 staging 目录，验收后才算交付。
+            {projectTitle
+              ? `任务会归入「${projectTitle}」，并使用项目的指令、默认模板和资产。`
+              : '源工作区只读；产物写入任务自己的 staging 目录，验收后才算交付。'}
           </DialogDescription>
         </DialogHeader>
 
@@ -108,7 +123,9 @@ export function NewTaskDialog({ open, onOpenChange }: { open: boolean; onOpenCha
                 选择
               </Button>
             </div>
-            <p className="text-caption text-muted-foreground">任务只能读取这里；不能直接改源文件。</p>
+            <p className="text-caption text-muted-foreground">
+              {projectTitle ? '必须位于项目的工作区根内；任务只能读取这里。' : '任务只能读取这里；不能直接改源文件。'}
+            </p>
           </div>
           <label className="block space-y-1.5">
             <span className="text-sm font-medium text-foreground">权限</span>

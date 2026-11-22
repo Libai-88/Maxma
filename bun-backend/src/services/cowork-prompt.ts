@@ -4,6 +4,48 @@
 
 import type { CoworkTask } from "./cowork-store";
 
+function parseInputs(task: CoworkTask): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(task.inputs_json);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function buildProjectSection(task: CoworkTask): string {
+  const inputs = parseInputs(task);
+  const project = inputs.project && typeof inputs.project === "object" && !Array.isArray(inputs.project)
+    ? inputs.project as Record<string, unknown>
+    : null;
+  const assets = Array.isArray(inputs.assets) ? inputs.assets : [];
+  const lines: string[] = [];
+  if (project) {
+    const title = typeof project.title === "string" ? project.title : "";
+    const instructions = typeof project.instructions === "string" ? project.instructions.trim() : "";
+    const templates = Array.isArray(project.templates) ? project.templates.map(String).filter(Boolean) : [];
+    lines.push("## 项目上下文");
+    if (title) lines.push(`- 项目：${title}`);
+    if (instructions) lines.push(`- 项目指令（必须遵守）：\n${instructions}`);
+    if (templates.length > 0) lines.push(`- 默认模板：${templates.join("、")}`);
+  }
+  if (assets.length > 0) {
+    const paths = assets.flatMap((item) => {
+      if (!item || typeof item !== "object") return [];
+      const path = (item as Record<string, unknown>).path;
+      const label = (item as Record<string, unknown>).label;
+      return typeof path === "string" ? [`- ${typeof label === "string" ? label : path}：${path}`] : [];
+    });
+    if (paths.length > 0) {
+      lines.push("## 项目输入资产（只读）");
+      lines.push(...paths.slice(0, 50));
+    }
+  }
+  return lines.length > 0 ? `\n${lines.join("\n")}\n` : "";
+}
+
 export function buildCoworkPrompt(task: CoworkTask, opts: { resume?: boolean; checkpoint?: string } = {}): string {
   const resumeLine = opts.resume
     ? `\n这是恢复执行。已有步骤和产物会保留；已完成步骤不要重复，先读取任务步骤与 staging 目录里的现有文件。\n`
@@ -14,7 +56,7 @@ export function buildCoworkPrompt(task: CoworkTask, opts: { resume?: boolean; ch
 ## 任务
 - 标题：${task.title}
 - 目标：${task.objective}
-
+${buildProjectSection(task)}
 ## 路径边界（硬约束）
 - 源工作区：${task.workspace_root}
   - 只读。你可以读取用户资料，但绝对不要写、覆盖、删除源工作区里的任何文件。

@@ -107,11 +107,17 @@ export interface MaxmaBrowserBridge {
   offState: () => void
 }
 
+export interface DesktopNotifyPayload {
+  title: string
+  body: string
+}
+
 export interface MaxmaDesktopBridge {
   platform?: string
   pickPath: (kind: 'file' | 'folder') => Promise<DesktopPickResult>
   revealPath: (path: string) => Promise<void>
   openPath: (path: string) => Promise<void>
+  notify?: (payload: DesktopNotifyPayload) => Promise<{ shown: boolean; reason?: string }>
   browser?: MaxmaBrowserBridge
 }
 

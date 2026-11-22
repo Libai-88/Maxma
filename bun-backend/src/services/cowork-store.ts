@@ -16,35 +16,64 @@ import { Database } from "bun:sqlite";
 
 import { getApiDataDir } from "../app-paths";
 import { getConnection } from "../db/core";
+import { listActivity as queryActivity } from "./cowork-activity-store";
+import { CoworkConflictError, CoworkNotFoundError, CoworkValidationError } from "./cowork-errors";
 import {
-  MAXMA_PERMISSION_MODES,
-  type MaxmaPermissionMode,
-} from "../../../bun-sidecar/src/kernel/pi-contract";
+  addProjectAsset as addProjectAssetRow,
+  attachAssetToTask as attachProjectAssetToTask,
+  coworkProjectAssetsRoot,
+  createProject as createProjectRow,
+  getProject as getProjectRow,
+  getProjectAsset as getProjectAssetRow,
+  isPathInside,
+  listProjectAssets as queryProjectAssets,
+  listProjectEvents as queryProjectEvents,
+  listProjects as queryProjects,
+  normalizeWorkspaceRoots,
+  removeProjectAsset as removeProjectAssetRow,
+  updateProject as updateProjectRow,
+  type CoworkProjectContext,
+} from "./cowork-project-store";
+import { recoverInterruptedTasks as recoverTasks } from "./cowork-recovery";
+import {
+  RUN_TRANSITIONS,
+  TASK_TRANSITIONS,
+  asString,
+  coworkArtifactSnapshotPath,
+  coworkTaskRoot,
+  coworkTaskStagingRoot,
+  isPermissionMode,
+  normalizeWorkspaceRoot,
+  nowIso,
+  sha256File,
+} from "./cowork-store-support";
 
-export const COWORK_TASK_STATUSES = [
-  "draft",
-  "planning",
-  "awaiting_plan",
-  "running",
-  "awaiting_approval",
-  "paused",
-  "review",
-  "completed",
-  "failed",
-  "cancelled",
-] as const;
+export { CoworkConflictError, CoworkNotFoundError, CoworkValidationError } from "./cowork-errors";
+export {
+  coworkProjectAssetsRoot,
+  isPathInside,
+  normalizeWorkspaceRoots,
+} from "./cowork-project-store";
 
-export type CoworkTaskStatus = (typeof COWORK_TASK_STATUSES)[number];
+export {
+  COWORK_APPROVAL_STATUSES,
+  COWORK_RUN_STATUSES,
+  COWORK_STEP_STATUSES,
+  COWORK_TASK_STATUSES,
+  type CoworkApprovalKind,
+  type CoworkApprovalStatus,
+  type CoworkRunStatus,
+  type CoworkStepStatus,
+  type CoworkTaskStatus,
+} from "./cowork-status";
 
-export const COWORK_RUN_STATUSES = ["running", "paused", "completed", "failed", "cancelled"] as const;
-export type CoworkRunStatus = (typeof COWORK_RUN_STATUSES)[number];
-
-export const COWORK_STEP_STATUSES = ["pending", "running", "completed", "failed", "skipped"] as const;
-export type CoworkStepStatus = (typeof COWORK_STEP_STATUSES)[number];
-
-export type CoworkApprovalKind = "plan" | "tool";
-export const COWORK_APPROVAL_STATUSES = ["pending", "approved", "rejected", "modified", "expired"] as const;
-export type CoworkApprovalStatus = (typeof COWORK_APPROVAL_STATUSES)[number];
+import type {
+  CoworkApprovalKind,
+  CoworkApprovalStatus,
+  CoworkRunStatus,
+  CoworkStepStatus,
+  CoworkTaskStatus,
+} from "./cowork-status";
 
 export interface CoworkTask {
   id: string;
@@ -135,96 +164,45 @@ export interface CoworkTaskDetail {
   latest_run: CoworkRun | null;
 }
 
-export class CoworkConflictError extends Error {
-  readonly code = "COWORK_CONFLICT";
-  constructor(message: string) {
-    super(message);
-    this.name = "CoworkConflictError";
-  }
+export interface CoworkProject {
+  id: string;
+  title: string;
+  instructions: string;
+  workspace_roots_json: string;
+  default_template_ids_json: string;
+  model_policy_json: string;
+  data_policy: string;
+  created_at: string;
+  updated_at: string;
 }
 
-export class CoworkNotFoundError extends Error {
-  readonly code = "COWORK_NOT_FOUND";
-  constructor(message: string) {
-    super(message);
-    this.name = "CoworkNotFoundError";
-  }
+export interface CoworkProjectAsset {
+  id: string;
+  project_id: string;
+  path: string;
+  label: string;
+  source: string;
+  size_bytes: number;
+  created_at: string;
 }
 
-export class CoworkValidationError extends Error {
-  readonly code = "COWORK_VALIDATION";
-  constructor(message: string) {
-    super(message);
-    this.name = "CoworkValidationError";
-  }
+export interface CoworkSchedule {
+  id: string;
+  task_id: string;
+  cron: string;
+  timezone: string;
+  enabled: number;
+  next_run_at: string | null;
+  last_run_at: string | null;
+  missed_policy: string;
+  last_status: string | null;
+  last_error: string | null;
+  last_task_run_id: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
-const TASK_TRANSITIONS: Record<CoworkTaskStatus, CoworkTaskStatus[]> = {
-  draft: ["planning", "cancelled"],
-  planning: ["awaiting_plan", "running", "paused", "failed", "cancelled"],
-  awaiting_plan: ["running", "planning", "paused", "failed", "cancelled"],
-  running: ["awaiting_plan", "awaiting_approval", "paused", "review", "failed", "cancelled"],
-  awaiting_approval: ["running", "paused", "failed", "cancelled"],
-  paused: ["running", "planning", "cancelled"],
-  review: ["completed", "planning", "cancelled"],
-  completed: ["planning"],
-  failed: ["planning", "cancelled"],
-  cancelled: ["planning"],
-};
-
-const RUN_TRANSITIONS: Record<CoworkRunStatus, CoworkRunStatus[]> = {
-  running: ["paused", "completed", "failed", "cancelled"],
-  paused: ["running", "failed", "cancelled"],
-  completed: [],
-  failed: ["running"],
-  cancelled: [],
-};
-
-export function coworkTaskRoot(): string {
-  return path.join(getApiDataDir(), "cowork", "tasks");
-}
-
-export function coworkTaskStagingRoot(taskId: string): string {
-  return path.join(coworkTaskRoot(), taskId, "staging");
-}
-
-/**
- * 每个交付物版本独立保存一份字节快照，避免同路径覆盖后历史版本只剩 sha256。
- * 目录放在任务根下、staging 之外；下载路由按 artifact id 取快照，不依赖 DB 新列。
- */
-export function coworkArtifactSnapshotPath(taskId: string, artifactId: string, sourcePath: string): string {
-  return path.join(coworkTaskRoot(), taskId, "artifact-versions", artifactId, path.basename(sourcePath));
-}
-
-function nowIso(): string {
-  return new Date().toISOString();
-}
-
-function asString(value: unknown, fallback = ""): string {
-  return typeof value === "string" ? value : fallback;
-}
-
-function isPermissionMode(value: string | undefined): value is MaxmaPermissionMode {
-  return typeof value === "string" && (MAXMA_PERMISSION_MODES as readonly string[]).includes(value);
-}
-
-function normalizeWorkspaceRoot(raw: string): string {
-  if (!path.isAbsolute(raw)) {
-    throw new CoworkValidationError("workspace_root 必须是绝对路径");
-  }
-  let stat: fs.Stats;
-  try {
-    stat = fs.statSync(raw);
-  } catch {
-    throw new CoworkValidationError("workspace_root 不存在或不可访问");
-  }
-  if (!stat.isDirectory()) throw new CoworkValidationError("workspace_root 必须是文件夹");
-  return fs.realpathSync(raw);
-}
-
-function sha256File(filePath: string): string {
-  return crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
-}
+export { coworkArtifactSnapshotPath, coworkTaskRoot, coworkTaskStagingRoot } from "./cowork-store-support";
 
 export interface CoworkStoreOptions {
   db?: Database;
@@ -307,6 +285,11 @@ export class CoworkStore {
       .all(taskId, Math.max(0, Math.floor(after)), safeLimit) as CoworkEvent[];
   }
 
+  /** 跨任务活动流（通知中心/活动面板）；按 id 倒序，附带任务标题与项目。 */
+  listActivity(limit = 60): Array<CoworkEvent & { task_title: string; project_id: string | null }> {
+    return queryActivity(this.db, limit);
+  }
+
   // ── 任务 ──
   createTask(input: {
     title: string;
@@ -322,30 +305,57 @@ export class CoworkStore {
     if (!title) throw new CoworkValidationError("任务标题不能为空");
     if (!objective) throw new CoworkValidationError("任务目标不能为空");
     const workspaceRoot = normalizeWorkspaceRoot(input.workspace_root);
+    const project = input.project_id ? this.getProject(input.project_id) : null;
+    if (project && JSON.parse(project.workspace_roots_json).length > 0) {
+      const roots = JSON.parse(project.workspace_roots_json) as string[];
+      const inside = roots.some((root) => {
+        try {
+          return isPathInside(fs.realpathSync(root), workspaceRoot);
+        } catch {
+          return false;
+        }
+      });
+      if (!inside) {
+        throw new CoworkValidationError("任务工作区必须位于项目工作区根内");
+      }
+    }
     const permissionMode = isPermissionMode(input.permission_mode)
       ? input.permission_mode
       : "operate";
+    const dataPolicy = input.data_policy === "cloud" || project?.data_policy === "cloud"
+      ? "cloud"
+      : "local_only";
     const id = crypto.randomUUID();
     const stagingRoot = coworkTaskStagingRoot(id);
     fs.mkdirSync(stagingRoot, { recursive: true });
     const createdAt = nowIso();
+    const inputs: Record<string, unknown> = { ...(input.inputs ?? {}) };
+    if (project) {
+      inputs.project = {
+        id: project.id,
+        title: project.title,
+        instructions: project.instructions,
+        templates: JSON.parse(project.default_template_ids_json),
+      };
+    }
     this.db
       .query(
         `INSERT INTO cowork_tasks
           (id, project_id, title, objective, status, workspace_root, staging_root,
            permission_mode, model_policy_json, data_policy, inputs_json, created_at, updated_at)
-         VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, '{}', ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
-        input.project_id ?? null,
+        project?.id ?? null,
         title,
         objective,
         workspaceRoot,
         stagingRoot,
         permissionMode,
-        input.data_policy === "local_only" ? "local_only" : "local_only",
-        JSON.stringify(input.inputs ?? {}),
+        project?.model_policy_json ?? "{}",
+        dataPolicy,
+        JSON.stringify(inputs),
         createdAt,
         createdAt,
       );
@@ -353,6 +363,7 @@ export class CoworkStore {
       title,
       objective,
       workspace_root: workspaceRoot,
+      project_id: project?.id ?? null,
     });
     return this.getTask(id);
   }
@@ -363,10 +374,75 @@ export class CoworkStore {
     return row;
   }
 
-  listTasks(): CoworkTask[] {
+  listTasks(projectId?: string): CoworkTask[] {
+    if (projectId) {
+      return this.db
+        .query("SELECT * FROM cowork_tasks WHERE project_id = ? ORDER BY updated_at DESC")
+        .all(projectId) as CoworkTask[];
+    }
     return this.db
       .query("SELECT * FROM cowork_tasks ORDER BY updated_at DESC")
       .all() as CoworkTask[];
+  }
+
+  // ── 项目与资产（M3-B，实现在 cowork-project-store）──
+  listProjects(): CoworkProject[] {
+    return queryProjects(this.db);
+  }
+
+  getProject(projectId: string): CoworkProject {
+    return getProjectRow(this.db, projectId);
+  }
+
+  createProject(input: {
+    title: string;
+    instructions?: string;
+    workspace_roots?: unknown;
+    default_template_ids?: unknown;
+    model_policy?: Record<string, unknown>;
+    data_policy?: string;
+  }): CoworkProject {
+    return createProjectRow(this.db, input);
+  }
+
+  updateProject(projectId: string, patch: {
+    title?: string;
+    instructions?: string;
+    workspace_roots?: unknown;
+    default_template_ids?: unknown;
+    model_policy?: Record<string, unknown>;
+    data_policy?: string;
+  }): CoworkProject {
+    return updateProjectRow(this.db, projectId, patch);
+  }
+
+  listProjectAssets(projectId: string): CoworkProjectAsset[] {
+    return queryProjectAssets(this.db, projectId);
+  }
+
+  addProjectAsset(projectId: string, input: { path: string; label?: string }): CoworkProjectAsset {
+    return addProjectAssetRow(this.db, projectId, input);
+  }
+
+  getProjectAsset(projectId: string, assetId: string): CoworkProjectAsset {
+    return getProjectAssetRow(this.db, projectId, assetId);
+  }
+
+  removeProjectAsset(projectId: string, assetId: string): void {
+    removeProjectAssetRow(this.db, projectId, assetId);
+  }
+
+  attachAssetToTask(projectId: string, assetId: string, taskId: string): CoworkTask {
+    const ctx: CoworkProjectContext = {
+      db: this.db,
+      getTask: (id) => this.getTask(id),
+      appendEvent: (taskIdValue, runId, type, payload) => this.appendEvent(taskIdValue, runId, type, payload),
+    };
+    return attachProjectAssetToTask(ctx, projectId, assetId, taskId);
+  }
+
+  listProjectEvents(projectId: string, limit = 50): Array<Record<string, unknown>> {
+    return queryProjectEvents(projectId, limit);
   }
 
   getTaskDetail(taskId: string): CoworkTaskDetail {
@@ -709,64 +785,14 @@ export class CoworkStore {
 
   /** 应用重启后，把“进程内已不可能继续”的中间态标成 paused，并写入可恢复 checkpoint。 */
   recoverInterruptedTasks(): number {
-    const rows = this.db
-      .query(
-        `SELECT id, status FROM cowork_tasks
-         WHERE status IN ('planning','awaiting_plan','running','awaiting_approval')`,
-      )
-      .all() as Array<{ id: string; status: CoworkTaskStatus }>;
-    let count = 0;
-    for (const row of rows) {
-      const latest = this.getLatestRun(row.id);
-      const pendingBeforeRecovery = this.getPendingApprovals(row.id);
-      // 状态与在途审批可能短暂不一致（例如恢复后重新提交计划但状态未及时推进）；
-      // 以审批种类为准修正 phase，避免重启恢复后绕过计划审批直接执行。
-      const phase = pendingBeforeRecovery.some((approval) => approval.kind === "plan")
-        ? "awaiting_plan"
-        : pendingBeforeRecovery.some((approval) => approval.kind === "tool")
-          ? "awaiting_approval"
-          : row.status;
-      const previous = (() => {
-        if (!latest) return {};
-        try {
-          return JSON.parse(latest.checkpoint_json || "{}") as Record<string, unknown>;
-        } catch {
-          return {};
-        }
-      })();
-      if (latest && latest.status === "running") {
-        // phase 必须保留：否则 paused→resume 会把“等待计划审批”误判成直接执行，
-        // 相当于应用重启后绕过计划审批。row.status 是中断瞬间最可信的阶段。
-        this.updateRunStatus(latest.id, "paused", {
-          checkpoint: {
-            ...previous,
-            phase,
-            reason: "app_restart",
-            interrupted_at: nowIso(),
-            last_step_seq: this.getSteps(latest.id).length,
-          },
-        });
-      }
-      this.db
-        .query(
-          "UPDATE cowork_tasks SET status = 'paused', updated_at = ? WHERE id = ?",
-        )
-        .run(nowIso(), row.id);
-      // 进程重启后在途审批已不可能被原会话消费；先结算掉，避免恢复后 UI 显示
-      // “计划等待批准”却实际直接执行，也避免批准一个上一轮的幽灵计划。
-      for (const approval of pendingBeforeRecovery) {
-        try {
-          this.resolveApproval(approval.id, "expired", "app restart");
-        } catch {
-          // 审批可能已被上一轮 cancel/pause 结算；恢复流程不因它中断
-        }
-      }
-      this.appendEvent(row.id, latest?.id ?? null, "cowork.run.interrupted", {
-        reason: "app_restart",
-        message: "应用重启前任务未完成；已保留步骤，可恢复继续",
-      });
-      count += 1;
-    }
-    return count;
+    return recoverTasks({
+      db: this.db,
+      getLatestRun: (taskId) => this.getLatestRun(taskId),
+      getPendingApprovals: (taskId) => this.getPendingApprovals(taskId),
+      updateRunStatus: (runId, status, patch) => this.updateRunStatus(runId, status, patch),
+      getSteps: (runId) => this.getSteps(runId),
+      resolveApproval: (approvalId, status, reason) => this.resolveApproval(approvalId, status, reason),
+      appendEvent: (taskId, runId, type, payload) => this.appendEvent(taskId, runId, type, payload),
+    });
   }
 }

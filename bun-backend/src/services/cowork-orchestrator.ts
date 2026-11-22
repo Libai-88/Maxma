@@ -210,7 +210,7 @@ export class CoworkOrchestrator {
 
   async startTask(taskId: string): Promise<{ task: CoworkTask; run_id: string }> {
     const task = this.store.getTask(taskId);
-    if (!["draft", "failed", "cancelled"].includes(task.status)) {
+    if (!["draft", "failed", "cancelled", "completed"].includes(task.status)) {
       throw new CoworkConflictError(`当前状态 ${task.status} 不能启动新运行`);
     }
     const run = this.store.createRun(taskId, { freshSession: task.status !== "draft" });

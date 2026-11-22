@@ -9,6 +9,7 @@ import type {
   CodeIndexRootStatus,
   CommandResult,
   DocIndexRootStatus,
+  DocSearchHit,
   GitCommitResult,
   GitDiffResult,
   GitPrResult,
@@ -130,6 +131,12 @@ export function createWorkspaceApi({ request, getToken, ensureTokenLoaded }: Wor
         method: 'POST',
         body: JSON.stringify({ root_id: rootId, force }),
       }),
+
+    docIndexSearch: (q: string, rootId?: string, limit = 20) => {
+      const params = new URLSearchParams({ q, limit: String(limit) })
+      if (rootId) params.set('root_id', rootId)
+      return request<{ hits: DocSearchHit[] }>(`/doc-index/search?${params.toString()}`)
+    },
 
     workspaceSearch: (rootId: string, q: string, showIgnored = false) => {
       const params = new URLSearchParams({ root_id: rootId, q })

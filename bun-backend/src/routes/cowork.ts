@@ -72,6 +72,12 @@ export function createCoworkRoutes(deps: CoworkRoutesDeps): Hono {
     });
   });
 
+  app.get("/api/cowork/activity", (c) => {
+    if (!enabled()) return c.json({ detail: "Cowork 任务层未启用" }, 503);
+    const limit = Number(c.req.query("limit") ?? 60);
+    return c.json({ activity: getStore().listActivity(Number.isFinite(limit) ? limit : 60) });
+  });
+
   app.use("/api/cowork/tasks/*", async (c, next) => {
     if (!enabled()) return c.json({ detail: "Cowork 任务层未启用" }, 503);
     await next();
@@ -82,7 +88,7 @@ export function createCoworkRoutes(deps: CoworkRoutesDeps): Hono {
   });
 
   app.get("/api/cowork/tasks", (c) => {
-    return c.json({ tasks: getStore().listTasks() });
+    return c.json({ tasks: getStore().listTasks(c.req.query("project_id") || undefined) });
   });
 
   app.post("/api/cowork/tasks", async (c) => {
@@ -93,6 +99,8 @@ export function createCoworkRoutes(deps: CoworkRoutesDeps): Hono {
         objective: cleanText(body.objective, 20_000),
         workspace_root: cleanText(body.workspace_root, 1000),
         permission_mode: cleanText(body.permission_mode, 20),
+        project_id: cleanText(body.project_id, 200) || null,
+        data_policy: cleanText(body.data_policy, 20),
         inputs: body.inputs && typeof body.inputs === "object" && !Array.isArray(body.inputs)
           ? (body.inputs as Record<string, unknown>)
           : {},

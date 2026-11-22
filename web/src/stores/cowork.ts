@@ -9,8 +9,10 @@ import { create } from 'zustand'
 
 import { api } from '@/api'
 import { createLogger } from '@/utils/logger'
+import { maybeNotifyCowork } from '@/utils/coworkNotify'
 import type {
   CoworkApproval,
+  CoworkEvent,
   CoworkHealth,
   CoworkTask,
   CoworkTaskDetail,
@@ -98,6 +100,7 @@ interface CoworkState {
     objective: string
     workspace_root: string
     permission_mode?: string
+    project_id?: string | null
   }) => Promise<CoworkTask>
   runTask: () => Promise<void>
   pauseTask: () => Promise<void>
@@ -165,8 +168,9 @@ export const useCoworkStore = create<CoworkState>()((set, get) => {
       source.addEventListener('cowork', (event) => {
         if (streamedTaskId !== tokenTask) return
         try {
-          const parsed = JSON.parse((event as MessageEvent).data) as { id?: number }
+          const parsed = JSON.parse((event as MessageEvent).data) as CoworkEvent
           if (typeof parsed.id === 'number') set({ lastEventId: Math.max(get().lastEventId, parsed.id) })
+          maybeNotifyCowork(parsed)
         } catch {
           // 事件体损坏不阻断流；详情刷新仍会读 DB
         }

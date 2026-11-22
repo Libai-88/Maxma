@@ -15,12 +15,12 @@ import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { normalizeContextItem } from '@/context/contextItems'
 import { emitContextItem } from '@/context/contextBus'
-import type { WorkspaceRoot, WorkspaceTreeEntry } from '@/types/workspace'
-import type { DocIndexRootStatus } from '@/types/workspace'
+import type { DocIndexRootStatus, DocSearchHit, WorkspaceRoot, WorkspaceTreeEntry } from '@/types/workspace'
 import type { WorkbenchPaneProps } from './paneProps'
 import { FilePreview, type EditorDraft, type PreviewData, type PreviewTab } from './FilePreview'
 import type { OfficeFormat } from './OfficePreview'
 import { FileTree } from './FileTree'
+import { DocSearchPanel } from './DocSearchPanel'
 
 interface ContextMenuState {
   entry: WorkspaceTreeEntry
@@ -78,6 +78,10 @@ export function FilesPane({ sessionId }: WorkbenchPaneProps) {
   const [indexing, setIndexing] = useState(false)
   const [docIndexing, setDocIndexing] = useState(false)
   const [docStatus, setDocStatus] = useState<DocIndexRootStatus | null>(null)
+  const [docSearchOpen, setDocSearchOpen] = useState(false)
+  const [docQuery, setDocQuery] = useState('')
+  const [docHits, setDocHits] = useState<DocSearchHit[]>([])
+  const [docSearching, setDocSearching] = useState(false)
   const previewsRef = useRef<Record<string, PreviewData>>({})
   const draftsRef = useRef<Record<string, EditorDraft>>({})
   const editingPathRef = useRef('')
@@ -109,6 +113,8 @@ export function FilesPane({ sessionId }: WorkbenchPaneProps) {
     }
     let alive = true
     setDocStatus(null)
+    setDocHits([])
+    setDocQuery('')
     void api.docIndexStatus(rootId)
       .then((result) => {
         if (!alive) return
@@ -561,6 +567,34 @@ export function FilesPane({ sessionId }: WorkbenchPaneProps) {
     }
   }
 
+  async function searchDocIndex() {
+    if (!activeRoot || docSearching) return
+    const query = docQuery.trim()
+    if (!query) {
+      setDocHits([])
+      return
+    }
+    const epoch = rootEpochRef.current
+    setDocSearching(true)
+    setError('')
+    try {
+      const { hits } = await api.docIndexSearch(query, activeRoot.id, 20)
+      if (epoch !== rootEpochRef.current) return
+      setDocHits(hits)
+      if (hits.length === 0) setNotice('文档索引里没有匹配片段；如果文件是新加的，先重建索引。')
+    } catch (e) {
+      if (epoch === rootEpochRef.current) setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      if (epoch === rootEpochRef.current) setDocSearching(false)
+    }
+  }
+
+  function openDocHit(hit: DocSearchHit) {
+    if (tabs.some((tab) => tab.path === hit.relPath)) setActivePath(hit.relPath)
+    setFilter('')
+    setRevealPath({ path: hit.relPath, token: Date.now() })
+  }
+
   function contextAction(action: 'open' | 'reveal' | 'copy' | 'chat', entry: WorkspaceTreeEntry) {
     setMenu(null)
     if (action === 'open') { openFile(entry); return }
@@ -659,8 +693,24 @@ export function FilesPane({ sessionId }: WorkbenchPaneProps) {
         <Button size="icon-xs" variant="ghost" disabled={docIndexing} onClick={() => void buildDocIndex()} aria-label="建立文档索引" title="建立/更新文档索引（供 PDF/DOCX/XLSX 检索与页码引用使用）">
           <FileSearch className={cn('size-3.5', docIndexing && 'animate-pulse text-muted-foreground')} />
         </Button>
+        <Button size="icon-xs" variant="ghost" aria-pressed={docSearchOpen} onClick={() => setDocSearchOpen((open) => !open)} aria-label="文档内容检索" title="在已建索引的 PDF/DOCX/XLSX/MD/TXT 里搜内容与页码">
+          <Search className={cn('size-3.5', docSearchOpen && 'text-foreground')} />
+        </Button>
         <Button size="icon-xs" variant="ghost" aria-pressed={showIgnored} onClick={() => setShowIgnored((value) => !value)} aria-label={showIgnored ? '隐藏忽略项' : '显示忽略项'} title="显示忽略项"><MoreHorizontal className={cn('size-3.5', showIgnored && 'text-foreground')} /></Button>
       </div>
+
+      {docSearchOpen && (
+        <DocSearchPanel
+          query={docQuery}
+          onQueryChange={setDocQuery}
+          searching={docSearching}
+          onSearch={() => void searchDocIndex()}
+          onClose={() => { setDocSearchOpen(false); setDocHits([]) }}
+          hits={docHits}
+          onOpenHit={openDocHit}
+          status={docStatus}
+        />
+      )}
 
       {(error || notice) && (
         <div className={cn('flex items-start justify-between gap-2 rounded-md border px-2 py-1.5 text-micro', error ? 'border-destructive/40 bg-destructive/10 text-destructive' : 'border-border bg-accent/40 text-muted-foreground')}>

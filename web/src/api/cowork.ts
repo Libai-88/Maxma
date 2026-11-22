@@ -7,7 +7,15 @@
 
 import type {
   CreateCoworkTaskInput,
+  CoworkActivityEvent,
+  CoworkConnectorList,
   CoworkHealth,
+  CoworkMemoryFact,
+  CoworkProject,
+  CoworkProjectAsset,
+  CoworkProjectDetail,
+  CoworkSchedule,
+  CoworkScheduleList,
   CoworkTask,
   CoworkTaskDetail,
 } from '@/types/cowork'
@@ -92,6 +100,91 @@ export function createCoworkApi({ request, getToken, ensureTokenLoaded }: Cowork
         method: 'POST',
         body: JSON.stringify(decision),
       }),
+
+    // ── M3 项目 / 资产 / 记忆 ──
+    listCoworkProjects: () => request<{ projects: CoworkProject[] }>('/cowork/projects'),
+
+    createCoworkProject: (input: {
+      title: string
+      instructions?: string
+      workspace_roots?: string[]
+      data_policy?: string
+    }) => request<{ project: CoworkProject }>('/cowork/projects', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+    getCoworkProject: (id: string) =>
+      request<CoworkProjectDetail>(`/cowork/projects/${encodeURIComponent(id)}`),
+
+    updateCoworkProject: (id: string, input: {
+      title?: string
+      instructions?: string
+      workspace_roots?: string[]
+      data_policy?: string
+    }) => request<{ project: CoworkProject }>(`/cowork/projects/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+
+    addCoworkProjectAsset: (id: string, input: { path: string; label?: string }) =>
+      request<{ asset: CoworkProjectAsset }>(`/cowork/projects/${encodeURIComponent(id)}/assets`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+
+    removeCoworkProjectAsset: (id: string, assetId: string) =>
+      request<{ ok: boolean }>(`/cowork/projects/${encodeURIComponent(id)}/assets/${encodeURIComponent(assetId)}`, {
+        method: 'DELETE',
+      }),
+
+    attachCoworkProjectAsset: (id: string, assetId: string, taskId: string) =>
+      request<{ task: CoworkTask }>(`/cowork/projects/${encodeURIComponent(id)}/assets/${encodeURIComponent(assetId)}/attach`, {
+        method: 'POST',
+        body: JSON.stringify({ task_id: taskId }),
+      }),
+
+    searchCoworkProjectMemory: (id: string, query = '') =>
+      request<{ memory: CoworkMemoryFact[] }>(`/cowork/projects/${encodeURIComponent(id)}/memory?q=${encodeURIComponent(query)}`),
+
+    addCoworkProjectMemory: (id: string, content: string, category = '任务摘要') =>
+      request<{ memory: CoworkMemoryFact }>(`/cowork/projects/${encodeURIComponent(id)}/memory`, {
+        method: 'POST',
+        body: JSON.stringify({ content, category, confirmed: true }),
+      }),
+
+    // ── M3 定时 ──
+    listCoworkSchedules: (projectId?: string) =>
+      request<CoworkScheduleList>(`/cowork/schedules${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ''}`),
+
+    createCoworkSchedule: (input: {
+      task_id: string
+      cron: string
+      timezone?: string
+      missed_policy?: string
+    }) => request<{ schedule: CoworkSchedule }>('/cowork/schedules', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+    updateCoworkSchedule: (id: string, input: {
+      cron?: string
+      timezone?: string
+      missed_policy?: string
+      enabled?: boolean
+    }) => request<{ schedule: CoworkSchedule }>(`/cowork/schedules/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+
+    deleteCoworkSchedule: (id: string) =>
+      request<{ ok: boolean }>(`/cowork/schedules/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+    // ── M3 连接器 / 活动 ──
+    coworkConnectors: () => request<CoworkConnectorList>('/cowork/connectors'),
+
+    coworkActivity: (limit = 60) =>
+      request<{ activity: CoworkActivityEvent[] }>(`/cowork/activity?limit=${limit}`),
 
     /** 交给组件创建 EventSource；token 必须先 ensureTokenLoaded。 */
     prepareCoworkEvents: async (taskId: string, after = 0): Promise<string> => {

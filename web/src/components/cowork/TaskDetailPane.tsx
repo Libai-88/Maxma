@@ -19,9 +19,18 @@ import {
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { api } from '@/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   approvalPayload,
   coworkStepLabel,
@@ -318,6 +327,11 @@ function describeEvent(event: CoworkEvent): string {
   const payload = event.payload ?? parseCoworkJson(event.payload_json)
   switch (event.type) {
     case 'cowork.task.created': return '任务已创建'
+    case 'cowork.task.inputs.updated': return '任务输入已更新'
+    case 'cowork.schedule.created': return '定时任务已创建'
+    case 'cowork.schedule.triggered': return '定时任务已触发'
+    case 'cowork.schedule.skipped': return `定时任务已跳过：${payload.reason ?? ''}`.trim()
+    case 'cowork.schedule.failed': return `定时任务失败：${payload.error ?? ''}`.trim()
     case 'cowork.run.started': return `开始第 ${payload.attempt ?? '?'} 次运行`
     case 'cowork.plan.requested': return '已请求计划，等待模型提交'
     case 'cowork.plan.proposed': return '计划已提交，等待批准'
@@ -365,14 +379,13 @@ function EventLog({ events }: { events: CoworkEvent[] }) {
   )
 }
 
-function DetailActions() {
+function DetailActions({ onAccept }: { onAccept: () => void }) {
   const task = useCoworkStore((state) => state.detail?.task ?? null)
   const action = useCoworkStore((state) => state.action)
   const runTask = useCoworkStore((state) => state.runTask)
   const pauseTask = useCoworkStore((state) => state.pauseTask)
   const resumeTask = useCoworkStore((state) => state.resumeTask)
   const cancelTask = useCoworkStore((state) => state.cancelTask)
-  const acceptTask = useCoworkStore((state) => state.acceptTask)
   if (!task) return null
   const busy = Boolean(action)
   const canStart = ['draft', 'failed', 'cancelled'].includes(task.status)
@@ -402,7 +415,7 @@ function DetailActions() {
         </Button>
       )}
       {canAccept && (
-        <Button size="sm" disabled={busy} onClick={() => void acceptTask()}>
+        <Button size="sm" disabled={busy} onClick={onAccept}>
           {action === 'accept' ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Check className="size-3.5" aria-hidden />}
           验收完成
         </Button>
@@ -424,7 +437,14 @@ export function TaskDetail({ onDownload }: { onDownload: (artifact: CoworkArtifa
   const connection = useCoworkStore((state) => state.connection)
   const decideApproval = useCoworkStore((state) => state.decideApproval)
   const refreshDetail = useCoworkStore((state) => state.refreshDetail)
+  const acceptTask = useCoworkStore((state) => state.acceptTask)
   const [studio, setStudio] = useState<CoworkArtifact | null>(null)
+  const [acceptOpen, setAcceptOpen] = useState(false)
+  const [memoryDraft, setMemoryDraft] = useState('')
+  const [writeMemory, setWriteMemory] = useState(true)
+  const [acceptBusy, setAcceptBusy] = useState(false)
+  const [acceptError, setAcceptError] = useState('')
+  const [acceptNote, setAcceptNote] = useState('')
   const detailArtifacts = detail?.artifacts
 
   // 产物 SSE 只刷新 detail；打开中的弹层要跟随同一路径的最新版本，
@@ -447,6 +467,41 @@ export function TaskDetail({ onDownload }: { onDownload: (artifact: CoworkArtifa
     return () => clearInterval(timer)
   }, [studio, refreshDetail])
 
+
+
+  function openAccept(): void {
+    if (!detail) return
+    const { task } = detail
+    setMemoryDraft(`${task.title}：${task.objective}`.slice(0, 2000))
+    setWriteMemory(Boolean(task.project_id))
+    setAcceptError('')
+    setAcceptNote('')
+    setAcceptOpen(true)
+  }
+
+  async function confirmAccept(): Promise<void> {
+    if (!detail || acceptBusy) return
+    setAcceptBusy(true)
+    setAcceptError('')
+    try {
+      await acceptTask()
+      let note = '任务已验收完成。'
+      if (writeMemory && detail.task.project_id && memoryDraft.trim()) {
+        try {
+          await api.addCoworkProjectMemory(detail.task.project_id, memoryDraft.trim(), '验收摘要')
+          note = '任务已验收，摘要已写入项目记忆。'
+        } catch (err) {
+          note = `任务已验收，但项目记忆写入失败：${err instanceof Error ? err.message : String(err)}`
+        }
+      }
+      setAcceptOpen(false)
+      setAcceptNote(note)
+    } catch (err) {
+      setAcceptError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setAcceptBusy(false)
+    }
+  }
 
 
   if (detailLoading && !detail) {
@@ -491,7 +546,7 @@ export function TaskDetail({ onDownload }: { onDownload: (artifact: CoworkArtifa
             <h1 className="mt-2 text-xl font-semibold tracking-tight text-foreground">{task.title}</h1>
             <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">{task.objective}</p>
           </div>
-          <DetailActions />
+          <DetailActions onAccept={openAccept} />
         </div>
         <dl className="mt-4 grid gap-2 border-t border-border pt-3 text-caption sm:grid-cols-2">
           <div className="flex min-w-0 gap-2">
@@ -517,6 +572,10 @@ export function TaskDetail({ onDownload }: { onDownload: (artifact: CoworkArtifa
           </p>
         )}
       </header>
+
+      {acceptNote && (
+        <p className="rounded-md border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">{acceptNote}</p>
+      )}
 
       {planApproval && (
         <PlanApprovalCard
@@ -549,6 +608,52 @@ export function TaskDetail({ onDownload }: { onDownload: (artifact: CoworkArtifa
           </SectionCard>
         </div>
       </div>
+      <Dialog open={acceptOpen} onOpenChange={setAcceptOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>验收并写入项目记忆</DialogTitle>
+            <DialogDescription>
+              {task.project_id
+                ? '验收会把任务标记为完成；只有你勾选并确认，摘要才会写入项目记忆。'
+                : '这个任务不属于项目，验收后不会写入项目记忆。'}
+            </DialogDescription>
+          </DialogHeader>
+          {task.project_id ? (
+            <div className="space-y-3">
+              <label className="flex items-start gap-2 text-sm text-foreground">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 size-4 rounded border-border"
+                  checked={writeMemory}
+                  onChange={(event) => setWriteMemory(event.target.checked)}
+                />
+                把验收摘要写进项目记忆
+              </label>
+              {writeMemory && (
+                <Textarea
+                  className="min-h-32 text-sm"
+                  value={memoryDraft}
+                  onChange={(event) => setMemoryDraft(event.target.value)}
+                  maxLength={2000}
+                  aria-label="项目记忆摘要"
+                />
+              )}
+              {writeMemory && (
+                <p className="text-caption text-muted-foreground">在项目设置的「项目记忆」里可以搜到这条摘要。</p>
+              )}
+            </div>
+          ) : null}
+          {acceptError && <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{acceptError}</p>}
+          <DialogFooter>
+            <Button variant="ghost" disabled={acceptBusy} onClick={() => setAcceptOpen(false)}>取消</Button>
+            <Button disabled={acceptBusy} onClick={() => void confirmAccept()}>
+              {acceptBusy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Check className="size-4" aria-hidden />}
+              验收完成
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {studio && (
         <CoworkArtifactStudio
           taskId={task.id}

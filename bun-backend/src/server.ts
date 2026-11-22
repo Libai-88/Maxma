@@ -69,8 +69,13 @@ import { createHardwareRoutes } from "./routes/hardware";
 import { createDiagnosticsRoutes } from "./routes/diagnostics";
 import { createCapabilitiesRoutes } from "./routes/capabilities";
 import { createCoworkRoutes } from "./routes/cowork";
+import { createCoworkProjectRoutes } from "./routes/cowork-projects";
+import { createCoworkScheduleRoutes } from "./routes/cowork-schedules";
+import { createCoworkConnectorRoutes } from "./routes/cowork-connectors";
 import { CoworkStore } from "./services/cowork-store";
 import { CoworkOrchestrator } from "./services/cowork-orchestrator";
+import { CoworkScheduler } from "./services/cowork-scheduler";
+import { ConnectorRegistry } from "./services/connector-registry";
 import { startBackgroundSync, stopBackgroundSync } from "./services/opencode-zen";
 import { startKiloBackgroundSync, stopKiloBackgroundSync } from "./services/kilo-free";
 import { initializeDatabase } from "./db/core";
@@ -229,6 +234,8 @@ export function createApp(): Hono {
   // （测试会反复创建/删除临时数据目录，常驻连接会让清理报 EBUSY）。
   let coworkStore: CoworkStore | null = null;
   let coworkOrchestrator: CoworkOrchestrator | null = null;
+  let coworkScheduler: CoworkScheduler | null = null;
+  let connectorRegistry: ConnectorRegistry | null = null;
   const ensureCoworkStore = (): CoworkStore => {
     if (!coworkStore) {
       coworkStore = new CoworkStore();
@@ -247,10 +254,26 @@ export function createApp(): Hono {
     }
     return coworkOrchestrator;
   };
+  const ensureCoworkScheduler = (): CoworkScheduler => {
+    if (!coworkScheduler) {
+      coworkScheduler = new CoworkScheduler({
+        store: ensureCoworkStore,
+        orchestrator: ensureCoworkOrchestrator,
+      });
+    }
+    return coworkScheduler;
+  };
+  const ensureConnectorRegistry = (): ConnectorRegistry => {
+    if (!connectorRegistry) connectorRegistry = new ConnectorRegistry({ store: ensureCoworkStore });
+    return connectorRegistry;
+  };
   const coworkEnabled = () => process.env.MAXMA_COWORK !== "0";
   const app = new Hono();
   coworkInitializers.set(app, () => {
-    if (coworkEnabled()) ensureCoworkStore();
+    if (coworkEnabled()) {
+      ensureCoworkStore();
+      ensureCoworkScheduler().start();
+    }
   });
 
   // STABILITY-009：全局错误边界。路由抛出走 Bun 默认 = 形状不归一、
@@ -365,6 +388,18 @@ app.route("/", createExtensionsRoutes());
     orchestrator: ensureCoworkOrchestrator,
     enabled: coworkEnabled,
   }));
+  app.route("/", createCoworkProjectRoutes({
+    store: ensureCoworkStore,
+    enabled: coworkEnabled,
+  }));
+  app.route("/", createCoworkScheduleRoutes({
+    scheduler: ensureCoworkScheduler,
+    enabled: coworkEnabled,
+  }));
+  app.route("/", createCoworkConnectorRoutes({
+    registry: ensureConnectorRegistry,
+    enabled: coworkEnabled,
+  }));
 
   // 2.5c：capabilities 聚合 + skills/discovered 桩（endpoints 由 app.routes 派生）
   app.route(
@@ -441,6 +476,9 @@ app.route("/", createExtensionsRoutes());
   recordActivity("system", "startup", { message: `MaxmaHere 后端启动完成 (${VERSION})` });
 
   coworkDisposers.set(app, () => {
+    coworkScheduler?.close();
+    coworkScheduler = null;
+    connectorRegistry = null;
     coworkOrchestrator?.stop();
     coworkOrchestrator = null;
     coworkStore?.close();

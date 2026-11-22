@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, Notification, shell } = require("electron");
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const http = require("node:http");
@@ -228,6 +228,25 @@ function registerDesktopIpc() {
     }
     if (!fs.existsSync(pathValue)) throw new Error("路径不存在");
     shell.showItemInFolder(pathValue);
+  });
+
+  ipcMain.handle("maxma:notify", async (event, payloadValue) => {
+    if (!isTrustedSender(event)) throw new Error("拒绝来自非应用页面的通知请求");
+    if (!Notification.isSupported()) return { shown: false, reason: "unsupported" };
+    const payload = payloadValue && typeof payloadValue === "object" ? payloadValue : {};
+    const title = typeof payload.title === "string" ? payload.title.slice(0, 120) : "Maxma";
+    const body = typeof payload.body === "string" ? payload.body.slice(0, 600) : "";
+    if (!body) throw new Error("通知正文不能为空");
+    const notification = new Notification({ title, body, silent: false });
+    notification.on("click", () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    });
+    notification.show();
+    return { shown: true };
   });
 
   ipcMain.handle("maxma:open-path", async (event, pathValue) => {

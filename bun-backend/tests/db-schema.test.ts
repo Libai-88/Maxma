@@ -108,7 +108,7 @@ describe("path_whitelist 死表", () => {
     expect(tables).toContain("auth_tokens");
     expect(tables).toContain("const_sessions");
     expect(tables).toContain("event_hooks");
-    // v11：Cowork 任务域八表必须随新库一次性建齐。
+    // v11/v12：Cowork 任务域表必须随新库一次性建齐。
     for (const table of [
       "cowork_projects",
       "cowork_tasks",
@@ -118,6 +118,7 @@ describe("path_whitelist 死表", () => {
       "cowork_approvals",
       "cowork_schedules",
       "cowork_task_events",
+      "cowork_project_assets",
     ]) {
       expect(tables).toContain(table);
     }

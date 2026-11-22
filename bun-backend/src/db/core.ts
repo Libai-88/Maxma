@@ -21,7 +21,7 @@ export function dbPath(): string {
   return path.join(getApiDataDir(), "maxma.db");
 }
 
-export const SCHEMA_VERSION = 11;
+export const SCHEMA_VERSION = 12;
 
 type Migration = string | ((conn: Database) => void);
 
@@ -45,6 +45,36 @@ function migrateV6AddClaimToken(conn: Database): void {
   conn.exec(
     "INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (6, julianday('now'))",
   );
+}
+
+function migrateV12CoworkProjects(conn: Database): void {
+  // v12：项目资产引用与定时任务的重启补跑/跳过策略。
+  conn.exec(`CREATE TABLE IF NOT EXISTS cowork_project_assets (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      path TEXT NOT NULL,
+      label TEXT NOT NULL DEFAULT '',
+      source TEXT NOT NULL DEFAULT 'workspace',
+      size_bytes INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES cowork_projects(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_cowork_project_assets_project
+      ON cowork_project_assets(project_id, created_at DESC);`);
+  const scheduleCols = (conn.query("PRAGMA table_info(cowork_schedules)").all() as Array<{ name: string }>)
+    .map((row) => row.name);
+  const additions: Array<[string, string]> = [
+    ["missed_policy", "TEXT NOT NULL DEFAULT 'skip'"],
+    ["last_status", "TEXT"],
+    ["last_error", "TEXT"],
+    ["last_task_run_id", "TEXT"],
+  ];
+  for (const [name, definition] of additions) {
+    if (!scheduleCols.includes(name)) {
+      conn.exec(`ALTER TABLE cowork_schedules ADD COLUMN ${name} ${definition}`);
+    }
+  }
+  conn.exec("INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (12, julianday('now'))");
 }
 
 export const SCHEMA_MIGRATIONS: Migration[] = [
@@ -346,6 +376,8 @@ export const SCHEMA_MIGRATIONS: Migration[] = [
     CREATE INDEX IF NOT EXISTS idx_cowork_task_events_task_id
       ON cowork_task_events(task_id, id);
     INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (11, julianday('now'));`,
+  // v12: Cowork 项目资产与定时策略（M3-B/C）。
+  migrateV12CoworkProjects,
 ];
 
 let initializedForPath: string | null = null;

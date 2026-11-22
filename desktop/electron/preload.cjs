@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld("maxmaDesktop", {
   pickPath: (kind) => invoke("maxma:pick-path", kind),
   revealPath: (pathValue) => invoke("maxma:reveal-path", pathValue),
   openPath: (pathValue) => invoke("maxma:open-path", pathValue),
+  notify: (payload) => invoke("maxma:notify", payload),
   browser: {
     show: (bounds) => invoke("maxma:browser:show", bounds),
     hide: () => invoke("maxma:browser:hide"),

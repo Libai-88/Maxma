@@ -128,3 +128,15 @@ export interface DocIndexRootStatus {
   running: boolean
   startedAt: number | null
 }
+
+export interface DocSearchHit {
+  chunkId: number
+  path: string
+  relPath: string
+  root: string
+  format: string
+  locator: { page?: number; part?: number; paragraph?: number; sheet?: string; startLine?: number }
+  locatorLabel: string
+  snippet: string
+  rank: number
+}
