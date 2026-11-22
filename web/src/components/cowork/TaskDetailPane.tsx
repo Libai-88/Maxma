@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   AlertTriangle,
   Check,
@@ -423,7 +423,31 @@ export function TaskDetail({ onDownload }: { onDownload: (artifact: CoworkArtifa
   const action = useCoworkStore((state) => state.action)
   const connection = useCoworkStore((state) => state.connection)
   const decideApproval = useCoworkStore((state) => state.decideApproval)
+  const refreshDetail = useCoworkStore((state) => state.refreshDetail)
   const [studio, setStudio] = useState<CoworkArtifact | null>(null)
+  const detailArtifacts = detail?.artifacts
+
+  // 产物 SSE 只刷新 detail；打开中的弹层要跟随同一路径的最新版本，
+  // 否则 Agent 写入新版本后，用户仍盯着旧字节。
+  useEffect(() => {
+    setStudio((current) => {
+      if (!current) return current
+      const latest = (detailArtifacts ?? [])
+        .filter((artifact) => artifact.path === current.path)
+        .sort((a, b) => b.version - a.version)[0]
+      return latest && latest.id !== current.id ? latest : current
+    })
+  }, [detailArtifacts])
+
+  // 弹层打开期间补一个低频对账：SSE 在断线/重启后可能没有新事件可推，
+  // 只靠事件会让打开中的预览停在旧版本。
+  useEffect(() => {
+    if (!studio) return
+    const timer = setInterval(() => { void refreshDetail() }, 2000)
+    return () => clearInterval(timer)
+  }, [studio, refreshDetail])
+
+
 
   if (detailLoading && !detail) {
     return (

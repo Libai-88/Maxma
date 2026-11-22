@@ -110,6 +110,8 @@ Workbench 2.0 把右侧工作台从「只有推理/画布」扩成桌面 Agent �
 - 前端 `CoworkArtifactStudio.tsx` 复用 `OfficePreview`，DOCX/PPTX 用 `window.getSelection()`
   抓文本并带当前 PPTX 页码，XLSX 点单元格生成 `sheet + cell`；提交 `POST .../revise` 后创建新的
   planning run，仍要用户批准计划才写入。`TaskDetailPane` 按路径分组版本，历史版本可单独预览和下载。
+- 弹层打开期间每 2 秒对账一次任务详情；同一路径出现更高版本时，`studio` 自动切到新 artifact，
+  `OfficePreview` 重新拉 blob。这样 SSE 断线/重启后即使没有新事件可推，打开中的预览也不会停留在旧字节。
 
 ### 3.2 内置浏览器
 
