@@ -10,6 +10,7 @@
 import type { Context } from "hono";
 import { Hono } from "hono";
 import * as fs from "node:fs";
+import * as path from "node:path";
 
 import {
   addWorkspaceRoot,
@@ -24,6 +25,7 @@ import {
   listTree,
   readBlobFile,
   readTextFile,
+  resolveWorkspacePath,
   searchWorkspaceFiles,
   writeTextFile,
   WorkspaceError,
@@ -193,6 +195,122 @@ export function createWorkspaceRoutes(): Hono {
         return c.json({ error: { code: error.code, message: error.message } }, 403);
       }
       return c.json({ error: "COMMAND_FAILED", message: error instanceof Error ? error.message : String(error) }, 400);
+    }
+  });
+
+  /**
+   * 文件变更 SSE：给打开中的预览页用。
+   *
+   * Office 文件是 ZIP 容器，写到一半时不可解析；这里只报“路径有变化”，
+   * 前端拿到事件后重新读 blob。300ms 去抖 + 目录级 watch，能覆盖 Agent
+   * `write` 的 truncate/write 和 `write_office_file` 的原子替换两种写法。
+   */
+  app.get("/api/workspace/watch", (c) => {
+    try {
+      const root = rootFor(c, c.req.query("root_id") ?? "");
+      touchWorkspaceRoot(root.id);
+      const relative = c.req.query("path") ?? "";
+      const fullPath = resolveWorkspacePath(root, relative);
+      const directory = path.dirname(fullPath);
+      const baseName = path.basename(fullPath).toLowerCase();
+      const encoder = new TextEncoder();
+      let watcher: fs.FSWatcher | null = null;
+      let heartbeat: ReturnType<typeof setInterval> | null = null;
+      let debounce: ReturnType<typeof setTimeout> | null = null;
+      let closed = false;
+
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          const send = (event: string, payload: Record<string, unknown>) => {
+            if (closed) return;
+            try {
+              controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`));
+            } catch {
+              cleanup();
+            }
+          };
+          const snapshot = () => {
+            try {
+              const stat = fs.statSync(fullPath);
+              send("file", {
+                path: relative,
+                state: "ready",
+                mtime: stat.mtimeMs,
+                size: stat.size,
+              });
+            } catch {
+              // 原子替换的中间态：文件暂时不存在。前端保留旧画面，等下一次事件。
+              send("file", { path: relative, state: "writing" });
+            }
+          };
+          const cleanup = () => {
+            if (closed) return;
+            closed = true;
+            if (debounce) {
+              clearTimeout(debounce);
+              debounce = null;
+            }
+            if (heartbeat) {
+              clearInterval(heartbeat);
+              heartbeat = null;
+            }
+            try { watcher?.close(); } catch { /* already closed */ }
+            watcher = null;
+            try { controller.close(); } catch { /* client gone */ }
+          };
+          send("ready", { path: relative });
+          try {
+            watcher = fs.watch(directory, { persistent: false }, (_event, filename) => {
+              const changed = filename ? path.basename(String(filename)).toLowerCase() : "";
+              if (changed && changed !== baseName) return;
+              if (debounce) clearTimeout(debounce);
+              debounce = setTimeout(() => {
+                debounce = null;
+                snapshot();
+              }, 300);
+            });
+            watcher.on("error", () => {
+              send("error", { path: relative, message: "文件监听失败" });
+              cleanup();
+            });
+          } catch (error) {
+            send("error", {
+              path: relative,
+              message: error instanceof Error ? error.message : "文件监听失败",
+            });
+            cleanup();
+            return;
+          }
+          heartbeat = setInterval(() => {
+            if (closed) return;
+            try {
+              controller.enqueue(encoder.encode(": keepalive\n\n"));
+            } catch {
+              cleanup();
+            }
+          }, 15_000);
+          if (typeof heartbeat.unref === "function") heartbeat.unref();
+          c.req.raw.signal.addEventListener("abort", cleanup, { once: true });
+        },
+        cancel() {
+          closed = true;
+          if (debounce) clearTimeout(debounce);
+          if (heartbeat) clearInterval(heartbeat);
+          try { watcher?.close(); } catch { /* already closed */ }
+          watcher = null;
+        },
+      });
+
+      return new Response(stream, {
+        headers: {
+          "content-type": "text/event-stream",
+          "cache-control": "no-cache",
+          connection: "keep-alive",
+          "x-accel-buffering": "no",
+        },
+      });
+    } catch (error) {
+      return workspaceError(c, error);
     }
   });
 

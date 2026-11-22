@@ -149,5 +149,12 @@ export function createWorkspaceApi({ request, getToken, ensureTokenLoaded }: Wor
       }
       return res.blob()
     },
+
+    /** EventSource 不能带自定义头；预览监听走 query token（同 Cowork SSE）。 */
+    prepareWorkspaceWatch: async (rootId: string, path: string): Promise<string> => {
+      await ensureTokenLoaded()
+      const params = new URLSearchParams({ root_id: rootId, path, token: getToken() })
+      return `${BASE}/workspace/watch?${params.toString()}`
+    },
   }
 }

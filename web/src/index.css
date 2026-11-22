@@ -72,6 +72,29 @@
   contain-intrinsic-size: auto 600px;
 }
 
+/* Office 预览：第三方渲染器只负责页面内容，外框与页码节奏由工作台统一。 */
+.office-docx .docx-wrapper {
+  background: transparent;
+  padding: 0;
+}
+.office-docx .docx-wrapper > section.docx {
+  margin: 0 auto 12px;
+  border-radius: 6px;
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.18);
+}
+.office-pptx .pptx-preview-wrapper {
+  background: transparent !important;
+  margin: 0 auto !important;
+  overflow: hidden !important;
+}
+.office-pptx .pptx-preview-wrapper-next,
+.office-pptx .pptx-preview-wrapper-pagination {
+  display: none !important;
+}
+.office-pptx .pptx-preview-slide-wrapper {
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.18);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

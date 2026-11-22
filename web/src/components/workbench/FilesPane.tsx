@@ -18,6 +18,7 @@ import { emitContextItem } from '@/context/contextBus'
 import type { WorkspaceRoot, WorkspaceTreeEntry } from '@/types/workspace'
 import type { WorkbenchPaneProps } from './paneProps'
 import { FilePreview, type EditorDraft, type PreviewData, type PreviewTab } from './FilePreview'
+import type { OfficeFormat } from './OfficePreview'
 import { FileTree } from './FileTree'
 
 interface ContextMenuState {
@@ -28,6 +29,7 @@ interface ContextMenuState {
 
 const IMAGE_EXT = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'avif', 'svg'])
 const MARKDOWN_EXT = new Set(['md', 'markdown'])
+const OFFICE_EXT = new Set(['docx', 'xlsx', 'pptx'])
 
 function extOf(name: string): string {
   const dot = name.lastIndexOf('.')
@@ -74,10 +76,17 @@ export function FilesPane({ sessionId }: WorkbenchPaneProps) {
   const [revealPath, setRevealPath] = useState<{ path: string; token: number } | null>(null)
   const [indexing, setIndexing] = useState(false)
   const previewsRef = useRef<Record<string, PreviewData>>({})
+  const draftsRef = useRef<Record<string, EditorDraft>>({})
+  const editingPathRef = useRef('')
   const rootEpochRef = useRef(0)
+  const refreshRef = useRef<(payload: unknown) => void>(() => {})
+  const previewSeqRef = useRef<Record<string, number>>({})
 
   const activeRoot = useMemo(() => roots.find((root) => root.id === rootId) ?? roots[0] ?? null, [roots, rootId])
   const activeTab = tabs.find((tab) => tab.path === activePath) ?? null
+
+  useEffect(() => { draftsRef.current = drafts }, [drafts])
+  useEffect(() => { editingPathRef.current = editingPath }, [editingPath])
   const activePreview = activeTab ? previews[activeTab.path] ?? { kind: 'loading' as const } : null
   const activeDraft = activeTab ? drafts[activeTab.path] ?? null : null
   const dirtyPaths = useMemo(
@@ -215,12 +224,16 @@ export function FilesPane({ sessionId }: WorkbenchPaneProps) {
     }
   }
 
-  async function loadPreview(entry: WorkspaceTreeEntry) {
-    if (previewsRef.current[entry.path]) return
+  async function loadPreview(entry: WorkspaceTreeEntry, force = false) {
+    if (!force && previewsRef.current[entry.path]) return
     const root = activeRoot
     if (!root) return
     const epoch = rootEpochRef.current
+    const seq = (previewSeqRef.current[entry.path] ?? 0) + 1
+    previewSeqRef.current[entry.path] = seq
+    const stale = () => epoch !== rootEpochRef.current || seq !== previewSeqRef.current[entry.path]
     const ext = extOf(entry.name)
+    if (force) disposePreview(previewsRef.current[entry.path])
     const loading: PreviewData = { kind: 'loading' }
     previewsRef.current = { ...previewsRef.current, [entry.path]: loading }
     setPreviews(previewsRef.current)
@@ -228,7 +241,7 @@ export function FilesPane({ sessionId }: WorkbenchPaneProps) {
       if (IMAGE_EXT.has(ext) || ext === 'pdf') {
         const blob = await api.workspaceBlob(root.id, entry.path)
         const url = URL.createObjectURL(blob)
-        if (epoch !== rootEpochRef.current) {
+        if (stale()) {
           URL.revokeObjectURL(url)
           return
         }
@@ -239,15 +252,23 @@ export function FilesPane({ sessionId }: WorkbenchPaneProps) {
         setPreviews(previewsRef.current)
         return
       }
+      if (OFFICE_EXT.has(ext)) {
+        const blob = await api.workspaceBlob(root.id, entry.path)
+        if (stale()) return
+        const preview: PreviewData = { kind: 'office', format: ext as OfficeFormat, blob }
+        previewsRef.current = { ...previewsRef.current, [entry.path]: preview }
+        setPreviews(previewsRef.current)
+        return
+      }
       const result = await api.workspaceFile(root.id, entry.path)
-      if (epoch !== rootEpochRef.current) return
+      if (stale()) return
       const preview: PreviewData = MARKDOWN_EXT.has(ext)
         ? { kind: 'markdown', content: result.file.content, hash: result.file.hash }
         : { kind: 'text', content: result.file.content, hash: result.file.hash }
       previewsRef.current = { ...previewsRef.current, [entry.path]: preview }
       setPreviews(previewsRef.current)
     } catch (e) {
-      if (epoch !== rootEpochRef.current) return
+      if (stale()) return
       const message = e instanceof Error ? e.message : String(e)
       const preview: PreviewData = message.includes('二进制') || message.includes('BINARY')
         ? { kind: 'binary', message: '该文件不是可预览的 UTF-8 文本。' }
@@ -256,6 +277,47 @@ export function FilesPane({ sessionId }: WorkbenchPaneProps) {
       setPreviews(previewsRef.current)
     }
   }
+
+  refreshRef.current = (payload) => {
+    const data = payload as { path?: unknown; state?: unknown; mtime?: unknown; size?: unknown }
+    if (!activeTab || data.path !== activeTab.path || data.state !== 'ready') return
+    const size = Number(data.size)
+    const mtime = Number(data.mtime)
+    if (!Number.isFinite(size) || !Number.isFinite(mtime)) return
+    if (size === activeTab.size && mtime === activeTab.mtime) return
+    if (editingPathRef.current === activeTab.path && draftsRef.current[activeTab.path]?.dirty) {
+      setNotice('磁盘文件已更新；保存前请先重新加载，避免覆盖')
+      setTimeout(() => setNotice(''), 2500)
+      return
+    }
+    const nextTab: WorkspaceTreeEntry = { ...activeTab, size, mtime }
+    setTabs((current) => current.map((tab) => tab.path === nextTab.path ? { ...tab, size, mtime } : tab))
+    setStatPatch({ path: nextTab.path, size, mtime, token: Date.now() })
+    void loadPreview(nextTab, true)
+  }
+
+  useEffect(() => {
+    const rootId = activeRoot?.id
+    const tab = activeTab
+    if (!rootId || !tab || tab.type !== 'file') return
+    let source: EventSource | null = null
+    let disposed = false
+    void api.prepareWorkspaceWatch(rootId, tab.path).then((url) => {
+      if (disposed) return
+      source = new EventSource(url)
+      source.addEventListener('file', (event) => {
+        try {
+          refreshRef.current(JSON.parse(event.data) as unknown)
+        } catch { /* 事件体损坏时忽略，下一次落盘会再来 */ }
+      })
+    }).catch(() => {
+      // 监听失败不影响手动刷新；不把错误铺到整个文件面板。
+    })
+    return () => {
+      disposed = true
+      source?.close()
+    }
+  }, [activeRoot?.id, activeTab?.path, activeTab?.type])
 
   function openFile(entry: WorkspaceTreeEntry) {
     if (!activeRoot || entry.type !== 'file') return

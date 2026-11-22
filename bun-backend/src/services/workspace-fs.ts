@@ -400,7 +400,7 @@ export function writeTextFile(
   };
 }
 
-const IMAGE_TYPES: Record<string, string> = {
+const BLOB_TYPES: Record<string, string> = {
   png: "image/png",
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
@@ -410,6 +410,9 @@ const IMAGE_TYPES: Record<string, string> = {
   avif: "image/avif",
   svg: "image/svg+xml",
   pdf: "application/pdf",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 };
 
 export function readBlobFile(root: WorkspaceRoot, relative: string): BlobFileResult {
@@ -418,7 +421,7 @@ export function readBlobFile(root: WorkspaceRoot, relative: string): BlobFileRes
   const fileStat = assertRegularFile(fullPath);
   if (fileStat.size > MAX_BLOB_BYTES) fail("FILE_TOO_LARGE", 413, `二进制文件超过 ${MAX_BLOB_BYTES} 字节`);
   const ext = path.extname(fullPath).slice(1).toLowerCase();
-  const contentType = IMAGE_TYPES[ext];
+  const contentType = BLOB_TYPES[ext];
   if (!contentType) fail("BINARY_NOT_PREVIEWABLE", 415, "该类型不支持文件面板预览");
 
   let fd: number;

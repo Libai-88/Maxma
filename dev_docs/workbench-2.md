@@ -12,7 +12,8 @@ Workbench 2.0 把右侧工作台从「只有推理/画布」扩成桌面 Agent �
 
 - 工作区根的新增、切换、重命名、移除与可用性提示；
 - 懒加载文件树、按文件名过滤、递归文件名搜索、键盘导航、右键菜单、面包屑回填；
-- 多文件 tab、行号与语法高亮预览、文本/Markdown/图片/PDF/二进制/HTML 源码；
+- 多文件 tab、行号与语法高亮预览、文本/Markdown/图片/PDF/二进制/HTML 源码；DOCX/XLSX/PPTX
+  只读预览，并跟随磁盘落盘自动刷新（M2-A）；
 - CodeMirror 6 编辑器：`Ctrl+S` 保存、`Ctrl+F` 查找、dirty 标记、`base_hash` 冲突保护；
 - 变更/diff：分支/HEAD、工作区与暂存 diff、按文件审阅；
 - 命令运行器：无 TTY、cwd 锁工作区根、超时杀进程树、输出截断；
@@ -32,7 +33,8 @@ Workbench 2.0 把右侧工作台从「只有推理/画布」扩成桌面 Agent �
 - Web 端明确降级：文件与浏览器入口不出现，不留下点了没反应的按钮。
 
 本轮范围外（不是待办）：Side chat、系统通知、PR 创建、P4（远程/移动、多窗口、computer use、Chrome cookie
-导入、Office 深度预览、自动更新/签名、完整 IDE），以及按页签隔离的网络策略（当前 allowlist 是会话级全局）。
+导入、自动更新/签名、完整 IDE），以及按页签隔离的网络策略（当前 allowlist 是会话级全局）。Office 深度预览
+已由 M2-A 补上 DOCX/XLSX/PPTX 只读渲染与落盘刷新，但原位像素级编辑仍不在本期。
 
 ## 2. 文件与职责
 
@@ -51,7 +53,8 @@ Workbench 2.0 把右侧工作台从「只有推理/画布」扩成桌面 Agent �
 - `FilesPane.tsx`：根管理、刷新/忽略项、38% 树 + 预览、右键菜单、复制相对路径、资源管理器定位、加入当前会话引用；根切换 epoch 防止旧异步回写泄漏 blob。
 - `FileTree.tsx`：懒加载一层、目录优先、过滤、键盘、右键、`revealPath` 展开祖先。
 - `fileTreeModel.ts`：展开/过滤/键盘/面包屑的纯函数，供单测直接覆盖。
-- `FilePreview.tsx`：多 tab、行号、自研轻量 token 高亮、Markdown 安全渲染、图片/PDF blob、HTML 仅源码、面包屑。
+- `FilePreview.tsx`：多 tab、行号、自研轻量 token 高亮、Markdown 安全渲染、图片/PDF blob、Office 预览分支、HTML 仅源码、面包屑。
+- `OfficePreview.tsx`：DOCX/XLSX/PPTX 只读渲染；三套解析库按格式动态 import，统一由工作台提供外框。
 - `BrowserPane.tsx`：地址栏、工具栏、错误条、DOM bounds 同步、缩放换算；`active=false` 时隐藏 native view，保活但不悬浮。
 - `web/src/stores/workbench.ts`：v2 存储键、v1 迁移、宽度 320–860 夹紧。
 - `web/src/api/workspace.ts`：工作区 API 从 `api/index.ts` 拆出，主 API 文件回到体量基线内。
@@ -82,7 +85,13 @@ Workbench 2.0 把右侧工作台从「只有推理/画布」扩成桌面 Agent �
 - 面包屑目录段点击后，`revealPath` 展开祖先并聚焦目标；
 - 关闭 tab 后由副作用收敛 activePath，快速连点不会因渲染期 `tabs` 闭包互相覆盖；
 - HTML 不进入主 React DOM：只展示源码，另有受守卫的「用系统浏览器打开」；
-- 图片/PDF 走 blob，卸载/关 tab 时 `revokeObjectURL`。
+- 图片/PDF 走 blob，卸载/关 tab 时 `revokeObjectURL`；
+- Office 预览走 `OfficePreview.tsx`：DOCX 用 `docx-preview` 分页排版，XLSX 用 `read-excel-file`
+  渲染多工作表（100 行 / 30 列上限），PPTX 用 `pptx-preview` 翻页；三类库全部动态加载，不进聊天首屏；
+- Office 预览是只读的，不提供「编辑」按钮。`GET /api/workspace/watch` 按 `root_id + path`
+  校验后做目录级 `fs.watch`，300ms 去抖推送 SSE `ready/file/error`；`FilesPane` 收到 `ready`
+  后按请求序号重拉 blob，旧请求不会覆盖新画面。文件正被手工编辑且草稿 dirty 时只提示
+  「磁盘文件已更新」，不自动覆盖。
 
 ### 3.2 内置浏览器
 

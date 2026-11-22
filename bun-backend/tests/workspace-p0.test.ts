@@ -112,6 +112,77 @@ describe("workspace P0", () => {
     expect((await response.arrayBuffer()).byteLength).toBe(png.byteLength);
   });
 
+  test("blob：Office 容器返回 OOXML MIME，供工作台预览", async () => {
+    const cases: Array<[string, string]> = [
+      ["report.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+      ["book.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
+      ["deck.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"],
+    ];
+    const app = await makeApp();
+    const root = await addRoot(app, workspaceDir);
+    for (const [name, mime] of cases) {
+      fs.writeFileSync(path.join(workspaceDir, name), Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+      const response = await call(
+        app,
+        `/api/workspace/blob?root_id=${encodeURIComponent(root.id)}&path=${encodeURIComponent(name)}`,
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toBe(mime);
+      expect((await response.arrayBuffer()).byteLength).toBe(4);
+    }
+  });
+
+  test("watch：先 ready，落盘后推送 file 事件并带新 mtime/size", async () => {
+    fs.writeFileSync(path.join(workspaceDir, "live.docx"), "v1", "utf8");
+    const app = await makeApp();
+    const root = await addRoot(app, workspaceDir);
+    const response = await call(
+      app,
+      `/api/workspace/watch?root_id=${encodeURIComponent(root.id)}&path=live.docx`,
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+    const reader = response.body?.getReader();
+    expect(reader).toBeTruthy();
+    if (!reader) return;
+    const decoder = new TextDecoder();
+    let text = decoder.decode((await reader.read()).value);
+    expect(text).toContain("event: ready");
+
+    fs.writeFileSync(path.join(workspaceDir, "live.docx"), "version-two", "utf8");
+    for (let attempt = 0; attempt < 8 && !text.includes("event: file"); attempt += 1) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      text += decoder.decode(chunk.value);
+    }
+    expect(text).toContain("event: file");
+    const payloadLine = text.split("\n").find((line) => line.startsWith("data: ") && line.includes("\"state\":\"ready\""));
+    expect(payloadLine).toBeTruthy();
+    const payload = JSON.parse(payloadLine!.slice("data: ".length)) as { state: string; size: number; path: string };
+    expect(payload).toMatchObject({ state: "ready", size: 11, path: "live.docx" });
+    await reader.cancel();
+  }, 15_000);
+
+  test("watch：越界路径与远端来源被拒绝", async () => {
+    fs.writeFileSync(path.join(workspaceDir, "ok.txt"), "ok", "utf8");
+    const app = await makeApp();
+    const root = await addRoot(app, workspaceDir);
+    const escape = await call(
+      app,
+      `/api/workspace/watch?root_id=${encodeURIComponent(root.id)}&path=${encodeURIComponent("../secret.txt")}`,
+    );
+    expect([400, 403]).toContain(escape.status);
+
+    const remote = await call(
+      app,
+      `/api/workspace/watch?root_id=${encodeURIComponent(root.id)}&path=ok.txt`,
+      undefined,
+      "10.1.2.3",
+    );
+    expect(remote.status).toBe(403);
+    expect(((await remote.json()) as { error?: { code?: string } }).error?.code).toBe("LOOPBACK_ONLY");
+  });
+
   test("路径逃逸：..、绝对路径、UNC、NUL 都被拒绝", async () => {
     const outside = fs.mkdtempSync(path.join(os.tmpdir(), "maxma-workspace-outside-"));
     fs.writeFileSync(path.join(outside, "secret.txt"), "secret", "utf8");

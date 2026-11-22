@@ -695,6 +695,11 @@ export const BACKEND_SYNTHESIZED_EVENTS = [
   "task_review_update",
   // MOD-1：本地模型不可达时后端在开轮前换到回退渠道，并广播一条系统提示。
   "model_fallback",
+  // M2-A：工作区文件监听 SSE（`GET /api/workspace/watch`，`EventSource` 消费）。
+  // 不是聊天 WS 帧；登记在这里是为了让后端事件归属对账能看见它，
+  // 未来若新增 watch 事件，同样必须在这里认领。
+  "ready",
+  "file",
 ] as const;
 
 // ─────────────────────────────────────────────────────────────

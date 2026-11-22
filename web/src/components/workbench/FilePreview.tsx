@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { WorkspaceTreeEntry } from '@/types/workspace'
 import { breadcrumbSegments } from './fileTreeModel'
+import { OfficePreview, type OfficeFormat } from './OfficePreview'
 
 // CodeMirror 只在进入编辑态才加载，避免拖慢聊天主包。
 const FileEditor = lazy(() => import('./FileEditor').then((module) => ({ default: module.FileEditor })))
@@ -32,6 +33,7 @@ export type PreviewData =
   | { kind: 'markdown'; content: string; hash?: string; truncated?: boolean }
   | { kind: 'image'; url: string; size: number; mime: string }
   | { kind: 'pdf'; url: string; size: number }
+  | { kind: 'office'; format: OfficeFormat; blob: Blob }
   | { kind: 'binary'; message: string }
   | { kind: 'error'; message: string }
 
@@ -180,6 +182,9 @@ function PreviewBody({
   }
   if (preview.kind === 'pdf') {
     return <iframe src={preview.url} title={tab.name} className="min-h-0 flex-1 rounded-md border border-border bg-card" />
+  }
+  if (preview.kind === 'office') {
+    return <OfficePreview format={preview.format} blob={preview.blob} name={tab.name} />
   }
   if (editing && draft && !preview.truncated) {
     return (
