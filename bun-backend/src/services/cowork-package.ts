@@ -8,6 +8,11 @@ import * as path from "node:path";
 import { strToU8, zipSync } from "fflate";
 
 import { coworkArtifactSnapshotPath, type CoworkArtifact, type CoworkTask } from "./cowork-store";
+import { renderCoworkPassportMarkdown, type CoworkTaskPassport } from "./cowork-passport";
+import {
+  COWORK_PASSPORT_VERIFIER_FILENAME,
+  COWORK_PASSPORT_VERIFIER_SCRIPT,
+} from "./cowork-passport-verifier";
 
 interface SourceItem {
   kind: string;
@@ -49,7 +54,12 @@ function collectSources(task: CoworkTask): SourceItem[] {
   return sources;
 }
 
-function readme(task: CoworkTask, files: string[], sources: SourceItem[]): string {
+function readme(
+  task: CoworkTask,
+  files: string[],
+  sources: SourceItem[],
+  passport?: CoworkTaskPassport,
+): string {
   return [
     `# ${task.title}`,
     "",
@@ -62,6 +72,17 @@ function readme(task: CoworkTask, files: string[], sources: SourceItem[]): strin
     "## 交付物",
     ...files.map((file) => `- ${file}`),
     "",
+    ...(passport
+      ? [
+          "## Maxma 任务护照",
+          `- MAXMA-PASSPORT.json：结构化护照，指纹 ${passport.integrity.digest.slice(0, 16)}…`,
+          "- MAXMA-PASSPORT.md：可读版，含路由、审批、产物 SHA-256 与数据边界。",
+          `- ${COWORK_PASSPORT_VERIFIER_FILENAME}：零依赖核验脚本，Node.js 18+ 直接运行。`,
+          "- 核验：删除 passport_id 与 integrity，按 json-sort-keys/v1 规范化 JSON 后做 SHA-256；passport_id 应为 maxma- + 指纹前 12 位。",
+          `- 一键核验：node ${COWORK_PASSPORT_VERIFIER_FILENAME}`,
+          "",
+        ]
+      : []),
     "## 来源",
     ...(sources.length ? sources.map((source) => `- ${source.label ?? source.path}（${source.kind}）：${source.path}`) : ["- 未记录外部来源"]),
     "",
@@ -77,7 +98,11 @@ export interface DeliveryPackage {
   files: string[];
 }
 
-export function buildDeliveryPackage(task: CoworkTask, artifacts: CoworkArtifact[]): DeliveryPackage {
+export function buildDeliveryPackage(
+  task: CoworkTask,
+  artifacts: CoworkArtifact[],
+  passport?: CoworkTaskPassport,
+): DeliveryPackage {
   if (artifacts.length === 0) throw new Error("任务还没有交付物，无法打包");
   const entries: Record<string, Uint8Array> = {};
   const files: string[] = [];
@@ -108,7 +133,12 @@ export function buildDeliveryPackage(task: CoworkTask, artifacts: CoworkArtifact
     workspace_root: task.workspace_root,
     sources,
   }, null, 2));
-  entries["README.md"] = strToU8(readme(task, files, sources));
+  if (passport) {
+    entries["MAXMA-PASSPORT.json"] = strToU8(JSON.stringify(passport, null, 2));
+    entries["MAXMA-PASSPORT.md"] = strToU8(renderCoworkPassportMarkdown(passport));
+    entries[COWORK_PASSPORT_VERIFIER_FILENAME] = strToU8(COWORK_PASSPORT_VERIFIER_SCRIPT);
+  }
+  entries["README.md"] = strToU8(readme(task, files, sources, passport));
   const safeTitle = task.title.replace(/[\\/:*?"<>|]+/g, "_").trim().slice(0, 40) || "cowork-delivery";
   return {
     filename: `${safeTitle}-交付包.zip`,

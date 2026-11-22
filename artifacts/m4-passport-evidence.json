@@ -1,0 +1,108 @@
+{
+  "schema": "maxma.evidence.cowork-passport/v1",
+  "verified_at": "2026-11-23T01:54:06+08:00",
+  "feature": "Maxma 任务护照 / Maxma Passport",
+  "task": {
+    "id": "3db0b901-ad62-4410-85e6-fe1aed61d3a9",
+    "title": "M4 免费路由首任务",
+    "status": "completed",
+    "completed_at": "2026-11-22T16:43:36.000Z"
+  },
+  "passport": {
+    "schema": "maxma.cowork.passport/v1",
+    "passport_id": "maxma-00b172785be6",
+    "canonicalization": "json-sort-keys/v1",
+    "digest": "00b172785be602c4b06cb25eac72d6b997f0c95658432ea66edf421e63b8094d",
+    "markdown_chars": 1052,
+    "json_filename": "M4 免费路由首任务-Maxma-Passport.json",
+    "markdown_filename": "M4 免费路由首任务-Maxma-Passport.md"
+  },
+  "route": {
+    "provider_label": "Magpie 免费路由组",
+    "model": "group/never-stuck",
+    "location": "local",
+    "estimated_usd": 0
+  },
+  "artifact": {
+    "name": "m4-free-route-summary.md",
+    "size_bytes": 1059,
+    "sha256": "0ecbf7cac60506b0a79cecf1d6f22ccbc7c713b444d6cea3ea9235b014e4713b"
+  },
+  "delivery_package": {
+    "path": "D:\\Temp\\maxma-passport-package-v3.zip",
+    "bytes": 6469,
+    "sha256": "36f9c9b3d37a5bead1f008d0c2ab209eebe82d903817d95447e06753ba93738d",
+    "entries": [
+      "MAXMA-PASSPORT.json",
+      "MAXMA-PASSPORT.md",
+      "MAXMA-PASSPORT-VERIFY.mjs",
+      "README.md",
+      "sources.json",
+      "artifacts/m4-free-route-summary.md"
+    ],
+    "passport_json_bytes": 3153,
+    "passport_json_sha256": "f4a8315465a9ff6440b568f0347d0b4c8884416bebe6a1fd43079221422017d4",
+    "verifier_bytes": 3084,
+    "verifier_sha256": "3f269e5cf89dae627e3165837fb64b9a150cc3aff574cd25da11f0a79a4be107",
+    "verifier_exit_code": 0,
+    "tamper_exit_code": 1
+  },
+  "checks": {
+    "canonical_digest_recomputed": true,
+    "passport_id_matches_digest": true,
+    "clipboard_digest_matches": true,
+    "api_key_absent": true,
+    "nested_fallback_and_model_policy_scrubbed": true,
+    "artifact_sha256_matches_delivery_package": true,
+    "package_contains_passport_pair_and_verifier": true,
+    "package_readme_has_offline_verification": true,
+    "package_verifier_passes_untouched": true,
+    "package_verifier_rejects_tamper": true,
+    "ui_card_1440": true,
+    "ui_compact_card_829": true,
+    "ui_dialog_829": true,
+    "ui_in_app_verify_passes": true,
+    "markdown_ui_download_filename": "M4 免费路由首任务-Maxma-Passport.md"
+  },
+  "ui": {
+    "card_wide": {
+      "path": "artifacts/m4-passport-card.png",
+      "pixels": "897x386",
+      "layout": "1440 CSS px viewport, 4 列指标，路由可换行"
+    },
+    "card_narrow": {
+      "path": "artifacts/m4-passport-card-narrow.png",
+      "pixels": "829x870",
+      "layout": "任务列表上方，单击进入完整护照弹窗；不再被 244px 详情滚动区裁切"
+    },
+    "dialog": {
+      "path": "artifacts/m4-passport-verify.png",
+      "pixels": "829x870",
+      "sha256": "946e82a68e149748d0bbe6a4731c48966506e1fd5825262b00c3a1ac10818ef9",
+      "layout": "2x2 指标，路由、审批、交付物、数据策略完整可读；底部显示本地核验通过"
+    }
+  },
+  "tests": {
+    "bun_backend": "446 pass / 0 fail / 3060 expect (74 files)",
+    "bun_sidecar": "332 pass / 0 fail / 1500 expect, 25 snapshots (39 files)",
+    "web": "115 pass / 0 fail / 1018 expect (18 files)",
+    "typecheck": {
+      "web": "0 error",
+      "sidecar": "0 error",
+      "repo_type_budget": "0 / 0"
+    },
+    "guards": {
+      "web_lint": "0 error",
+      "hardcoded_colors": "pass (125 TSX)",
+      "spacing": "pass (125 TSX)",
+      "file_size": "pass",
+      "web_build": "pass"
+    }
+  },
+  "boundaries": [
+    "护照是 Maxma 侧记录，不是上游网关审计或第三方签名证书。",
+    "指纹证明护照正文与记录一致，不证明上游服务行为。",
+    "本机路由不等于数据绝不出机的强证明；强证明需结合本地桩与网络日志。",
+    "护照文本会把疑似 API Key / token 替换为 [redacted]；fallback 与 model_policy 只保留白名单字段。"
+  ]
+}

@@ -53,6 +53,7 @@ import {
 } from './taskUi'
 import { CoworkArtifactStudio } from './CoworkArtifactStudio'
 import { ArtifactsList, FileBackupsSection } from './TaskDetailArtifacts'
+import { TaskPassportCard } from './TaskPassportCard'
 
 function PlanApprovalCard({ approval, busy, onDecide }: {
   approval: CoworkApproval
@@ -680,6 +681,10 @@ export function TaskDetail({ onDownload, onOpenApprovals }: {
           </p>
         )}
       </header>
+
+      {artifacts.length > 0 && (
+        <TaskPassportCard taskId={task.id} status={task.status} artifactCount={artifacts.length} updatedAt={task.updated_at} />
+      )}
 
       {acceptNote && (
         <p className="rounded-md border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">{acceptNote}</p>

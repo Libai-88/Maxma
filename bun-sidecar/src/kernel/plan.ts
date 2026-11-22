@@ -52,11 +52,25 @@ export const PI_PLAN_MODE_DIRECTIVE = [
   "计划被批准后，你会收到执行指令，届时再逐步执行。",
 ].join("\n");
 
-/** 从计划 Markdown 提取顶层列表项作为步骤摘要（最多 12 条；与 OMP 版同算法）。 */
+/**
+ * 从计划 Markdown 提取步骤摘要（最多 12 条）。
+ *
+ * 优先取显式编号小节标题（`## 1. …` / `### 2) …`），因为模型常把
+ * “输入/产物/验收”写成小节内的列表项；若没有编号标题，再回退到顶层列表项。
+ * 这样审批摘要不会把子条目误算成步骤。
+ */
 export function parsePlanSteps(planText: string): string[] {
+  const numbered: string[] = [];
+  for (const line of planText.split(/\r?\n/)) {
+    const heading = /^#{2,4}\s*\d+[.)]\s*(.+)$/.exec(line);
+    if (heading?.[1]) numbered.push(heading[1].trim());
+    if (numbered.length >= 12) break;
+  }
+  if (numbered.length >= 2) return numbered;
+
   const steps: string[] = [];
   for (const line of planText.split(/\r?\n/)) {
-    // 仅顶层（无缩进）列表项：`- x`、`* x`、`1. x`、`1) x`
+    // 顶层（无缩进）列表项：`- x`、`* x`、`1. x`、`1) x`
     const m = /^(?:[-*]\s+|\d+[.)]\s+)(.+)$/.exec(line);
     if (m && m[1]) steps.push(m[1].trim());
     if (steps.length >= 12) break;

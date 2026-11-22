@@ -658,6 +658,10 @@ describe("kernel: pi RPC bridge", () => {
     const steps = parsePlanSteps("# 计划\n- 第一步\n- 第二步\n1. 第三步");
     expect(steps).toEqual(["第一步", "第二步", "第三步"]);
 
+    // 显式编号小节优先；不要把每节的“输入/产物/验收”子条目误算成步骤
+    const sectioned = parsePlanSteps("## 步骤\n### 1. 确认路径\n- 输入：工作区\n- 产物：无\n### 2) 写出摘要\n- 输入：清单\n- 产物：md");
+    expect(sectioned).toEqual(["确认路径", "写出摘要"]);
+
     const execution = tool.execute("call-1", { plan_markdown: "# 计划\n- 第一步\n- 第二步" });
     await new Promise((r) => setTimeout(r, 10)); // 等待 plan_proposed 发出
     const proposed = emitted.find((e) => e.type === "plan_proposed")!;

@@ -22,6 +22,7 @@ import {
 } from "../services/cowork-store";
 import { approvalView, listApprovals, batchableApprovals } from "../services/cowork-approval-center";
 import { buildDeliveryPackage } from "../services/cowork-package";
+import { buildCoworkTaskPassportBundle } from "../services/cowork-passport";
 import {
   deleteStagedArtifact,
   exportArtifactToWorkspace,
@@ -202,6 +203,18 @@ export function createCoworkRoutes(deps: CoworkRoutesDeps): Hono {
   app.get("/api/cowork/tasks/:id", (c) => {
     try {
       return c.json(getStore().getTaskDetail(c.req.param("id")));
+    } catch (err) {
+      return errorResponse(c, err);
+    }
+  });
+
+  /**
+   * Maxma 任务护照：只读聚合任务、路由、审批、步骤与产物指纹。
+   * 不返回 api_key / prompt 正文；下载时由前端自行保存。
+   */
+  app.get("/api/cowork/tasks/:id/passport", (c) => {
+    try {
+      return c.json(buildCoworkTaskPassportBundle(getStore().getTaskDetail(c.req.param("id"))));
     } catch (err) {
       return errorResponse(c, err);
     }
@@ -389,7 +402,9 @@ export function createCoworkRoutes(deps: CoworkRoutesDeps): Hono {
   app.get("/api/cowork/tasks/:id/package", (c) => {
     try {
       const task = getStore().getTask(c.req.param("id"));
-      const pkg = buildDeliveryPackage(task, getStore().getTaskDetail(task.id).artifacts);
+      const detail = getStore().getTaskDetail(task.id);
+      const passport = buildCoworkTaskPassportBundle(detail).passport;
+      const pkg = buildDeliveryPackage(task, detail.artifacts, passport);
       const encoded = encodeURIComponent(pkg.filename);
       return new Response(pkg.bytes, {
         headers: {

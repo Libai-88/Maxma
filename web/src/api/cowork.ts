@@ -22,6 +22,7 @@ import type {
   CoworkScheduleList,
   CoworkTask,
   CoworkTaskDetail,
+  CoworkTaskPassportBundle,
 } from '@/types/cowork'
 import { getApiBase } from '@/utils/env'
 
@@ -67,6 +68,9 @@ export function createCoworkApi({ request, getToken, ensureTokenLoaded }: Cowork
 
     getCoworkTask: (id: string) =>
       request<CoworkTaskDetail>(`/cowork/tasks/${encodeURIComponent(id)}`),
+
+    getCoworkTaskPassport: (id: string) =>
+      request<CoworkTaskPassportBundle>(`/cowork/tasks/${encodeURIComponent(id)}/passport`),
 
     startCoworkTask: (id: string) =>
       request<{ task: CoworkTask; run_id: string }>(`/cowork/tasks/${encodeURIComponent(id)}/run`, {

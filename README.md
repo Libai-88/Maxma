@@ -47,6 +47,12 @@ start.bat     一键启动（后端 + 前端，并打开浏览器 http://localho
 
 首次启动即可使用 Maxma 内置的免费模型通道（MiMo V2.6、Space Bunny），无需登录、注册或填写 API Key；也可以在网页“提供商”页面添加云端服务（填写 Base URL 与 API Key）或 Ollama、vLLM、LM Studio 等本地服务。浏览器访问 `http://localhost:5173`（开发）或 `http://127.0.0.1:8000`（后端直接托管 `web/dist`）即为 web 端。
 
+## 差异化：Maxma 任务护照
+
+每个 Cowork 交付都带一张本地护照（Maxma Passport）：任务目标、模型路由、审批决定、产物 SHA-256 与数据边界收在同一张凭证里，任务详情可直接查看、下载 JSON / Markdown，并在弹窗内用浏览器本地重算指纹完成自校验；交付包 ZIP 也会自动附带 `MAXMA-PASSPORT.json`、`MAXMA-PASSPORT.md` 与零依赖的 `MAXMA-PASSPORT-VERIFY.mjs`。护照指纹对键排序后的规范 JSON 计算，可离线复算；它不是日志导出，而是“这次交付是怎么来的”的交付凭证。
+
+说明与边界见 [docs/cowork-passport.md](docs/cowork-passport.md)。
+
 ## 手动搭建（进阶 / 跨平台）
 
 需要 Bun 1.3+、Node.js 18+。

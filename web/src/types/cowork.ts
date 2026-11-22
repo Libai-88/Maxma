@@ -113,6 +113,125 @@ export interface CoworkTaskDetail {
   latest_run: CoworkRun | null
 }
 
+/** Maxma 任务护照：路由、审批、产物指纹与数据边界的本地凭证。 */
+export interface CoworkPassportFallback {
+  from_provider: string
+  from_model: string
+  reason: string
+}
+
+export interface CoworkPassportRoute {
+  provider_id: string
+  provider_label: string
+  model: string
+  location: string
+  profile: string
+  reason: string
+  fallback: CoworkPassportFallback | null
+  cost: {
+    currency: string | null
+    estimated_usd: number | null
+    note: string | null
+  }
+  data_policy: string
+}
+
+export interface CoworkTaskPassport {
+  schema: string
+  brand: string
+  product: string
+  passport_id: string
+  issued_at: string
+  task: {
+    id: string
+    title: string
+    objective: string
+    status: string
+    project_id: string | null
+    created_at: string
+    updated_at: string
+    completed_at: string | null
+    permission_mode: string
+    data_policy: string
+    model_policy: {
+      profile: string
+    }
+  }
+  execution: {
+    runs: number
+    latest_run: {
+      attempt: number
+      status: string
+      started_at: string
+      ended_at: string | null
+      error: string | null
+    } | null
+    steps: {
+      total: number
+      completed: number
+      skipped: number
+      failed: number
+      pending: number
+      running: number
+    }
+  }
+  route: CoworkPassportRoute | null
+  approvals: {
+    total: number
+    pending: number
+    approved: number
+    rejected: number
+    modified: number
+    expired: number
+    by_kind: {
+      plan: number
+      tool: number
+      export: number
+      delete: number
+    }
+    items: Array<{
+      kind: string
+      status: string
+      created_at: string
+      resolved_at: string | null
+      reason: string | null
+    }>
+  }
+  artifacts: {
+    count: number
+    total_bytes: number
+    items: Array<{
+      name: string
+      path: string
+      kind: string
+      version: number
+      size_bytes: number
+      sha256: string
+      status: string
+    }>
+  }
+  source: {
+    group_id: string | null
+    workspace_root: string
+    staging_root: string
+    items: Array<{ kind: string; path: string; label: string | null }>
+  }
+  integrity: {
+    algorithm: 'sha256'
+    canonicalization: 'json-sort-keys/v1'
+    digest: string
+  }
+}
+
+export interface CoworkTaskPassportBundle {
+  passport: CoworkTaskPassport
+  markdown: string
+  filenames: {
+    json: string
+    markdown: string
+  }
+}
+
 export interface CoworkHealth {
   enabled: boolean
   tasks: number

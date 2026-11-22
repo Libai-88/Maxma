@@ -15,6 +15,7 @@ import { CoworkConflictError, CoworkStore, CoworkValidationError } from "../src/
 import {
   buildDeliveryPackage,
 } from "../src/services/cowork-package";
+import { buildCoworkTaskPassport } from "../src/services/cowork-passport";
 import {
   deleteStagedArtifact,
   exportArtifactToWorkspace,
@@ -318,13 +319,34 @@ describe("M4 交付包（T4.5）", () => {
       inputs: { assets: [{ path: path.join(workspace, "paper.pdf"), label: "论文" }] },
     });
     const { artifact, source } = makeArtifact(task.id);
-    const pkg = buildDeliveryPackage(task, [artifact]);
+    store!.appendEvent(task.id, null, "cowork.model.routed", {
+      provider_id: "magpie",
+      provider_label: "Magpie 免费路由组",
+      model: "group/never-stuck",
+      location: "local",
+      profile: "private",
+      reason: "优先本机模型",
+      fallback: null,
+      cost: { currency: "USD", estimated_usd: 0, note: "本机模型，无 API 费用" },
+      data_policy: "local_only",
+    });
+    const passport = buildCoworkTaskPassport(store!.getTaskDetail(task.id));
+    const pkg = buildDeliveryPackage(task, [artifact], passport);
     const files = unzipSync(pkg.bytes);
     const names = Object.keys(files);
     expect(names).toContain("README.md");
     expect(names).toContain("sources.json");
+    expect(names).toContain("MAXMA-PASSPORT.json");
+    expect(names).toContain("MAXMA-PASSPORT.md");
+    expect(names).toContain("MAXMA-PASSPORT-VERIFY.mjs");
     expect(names).toContain(`artifacts/${path.basename(source)}`);
     expect(strFromU8(files["README.md"]!)).toContain("周报交付");
+    expect(strFromU8(files["README.md"]!)).toContain("Maxma 任务护照");
     expect(strFromU8(files["sources.json"]!)).toContain("paper.pdf");
+    expect(strFromU8(files["MAXMA-PASSPORT.json"]!)).toContain("maxma.cowork.passport/v1");
+    expect(strFromU8(files["MAXMA-PASSPORT.json"]!)).toContain("group/never-stuck");
+    expect(strFromU8(files["MAXMA-PASSPORT.md"]!)).toContain("每个交付，都有一张护照");
+    expect(strFromU8(files["MAXMA-PASSPORT-VERIFY.mjs"]!)).toContain("passport digest");
+    expect(strFromU8(files["README.md"]!)).toContain("MAXMA-PASSPORT-VERIFY.mjs");
   });
 });

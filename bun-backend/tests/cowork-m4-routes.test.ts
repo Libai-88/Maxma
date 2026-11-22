@@ -135,7 +135,34 @@ describe("M4 导出审批、备份恢复与交付包 REST", () => {
     const files = unzipSync(new Uint8Array(await pkgRes.arrayBuffer()));
     expect(Object.keys(files)).toContain("README.md");
     expect(Object.keys(files)).toContain("sources.json");
+    expect(Object.keys(files)).toContain("MAXMA-PASSPORT.json");
+    expect(Object.keys(files)).toContain("MAXMA-PASSPORT.md");
+    expect(Object.keys(files)).toContain("MAXMA-PASSPORT-VERIFY.mjs");
     expect(strFromU8(files["README.md"]!)).toContain("导出测试");
+    expect(strFromU8(files["README.md"]!)).toContain("Maxma 任务护照");
+    expect(strFromU8(files["README.md"]!)).toContain("json-sort-keys/v1");
+
+    const passportRes = await instance.request(`/api/cowork/tasks/${task.id}/passport`, { headers: headers() });
+    expect(passportRes.status).toBe(200);
+    const passportBundle = (await passportRes.json()) as {
+      passport: {
+        schema: string;
+        passport_id: string;
+        integrity: { digest: string; canonicalization: string };
+        artifacts: { count: number };
+        task: { id: string };
+      };
+      markdown: string;
+      filenames: { json: string; markdown: string };
+    };
+    expect(passportBundle.passport.schema).toBe("maxma.cowork.passport/v1");
+    expect(passportBundle.passport.task.id).toBe(task.id);
+    expect(passportBundle.passport.artifacts.count).toBe(1);
+    expect(passportBundle.passport.passport_id).toBe(`maxma-${passportBundle.passport.integrity.digest.slice(0, 12)}`);
+    expect(passportBundle.passport.integrity.canonicalization).toBe("json-sort-keys/v1");
+    expect(passportBundle.markdown).toContain("# Maxma 任务护照");
+    expect(passportBundle.filenames.json).toContain("Maxma-Passport.json");
+    expect(passportBundle.filenames.markdown).toContain("Maxma-Passport.md");
   });
 
   test("模型路由预检：local_only 拒绝云端且不泄露 api_key", async () => {
